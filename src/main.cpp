@@ -1,6 +1,7 @@
 #include <SDL3/SDL.h>
 #include "Menu.h"
 #include "ControlsMenu.h"
+#include <SDL3/SDL_video.h>
 #include <iostream>
 
 int main(int argc, char* argv[]) {
@@ -8,7 +9,7 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    SDL_Window* window = SDL_CreateWindow("Proton-Optimized Game Framework", 1280, 720, SDL_WINDOW_RESIZABLE);
+    SDL_Window* window = SDL_CreateWindow("Proton-Optimized Game Framework", 0, 0, SDL_WINDOW_FULLSCREEN);
     if (!window) {
         SDL_Quit();
         return -1;
