@@ -36,7 +36,17 @@ int main(int argc, char* argv[]) {
     GameState currentState = GameState::MainMenu;
     SDL_Event event;
 
+    uint64_t lastTime = SDL_GetTicksNS();
+
     while (currentState != GameState::Exiting) {
+        uint64_t currentTime = SDL_GetTicksNS();
+        float deltaTime = (currentTime - lastTime) / 1000000000.0f; // Convert nanoseconds to seconds
+        lastTime = currentTime;
+
+        // if (currentState == GameState::Gameplay) {
+        //     gameplay.Update(deltaTime);
+        // }
+
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_EVENT_QUIT) {
                 currentState = GameState::Exiting;
