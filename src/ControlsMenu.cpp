@@ -4,6 +4,7 @@
 #include <sstream>
 #include <cstring>
 
+// These are the default keybindings
 ControlsMenu::ControlsMenu() : selectedIndex(0), isRebinding(false) {
     bindings = {
         { "Move Left",    SDLK_A },

@@ -8,6 +8,7 @@ enum class GameState {
     MainMenu,
     Gameplay,
     ControlsMenu,
+    SavesMenu,
     Exiting
 };
 

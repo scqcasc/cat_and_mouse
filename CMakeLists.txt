@@ -11,6 +11,10 @@ add_executable(VulkanSDLGame
     src/Menu.cpp 
     src/ControlsMenu.h 
     src/ControlsMenu.cpp
+    src/SavesMenu.h
+    src/SavesMenu.cpp
+    src/Helpers.h
+    src/Helpers.cpp
 )
 
 if(WIN32)

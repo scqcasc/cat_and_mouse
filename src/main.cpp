@@ -1,6 +1,7 @@
 #include <SDL3/SDL.h>
 #include "Menu.h"
 #include "ControlsMenu.h"
+#include "SavesMenu.h"
 #include <SDL3/SDL_video.h>
 #include <SDL3_ttf/SDL_ttf.h>
 #include <iostream>
@@ -31,6 +32,7 @@ int main(int argc, char* argv[]) {
 
     Menu mainMenu;
     ControlsMenu controlsMenu;
+    SavesMenu savesMenu;
     GameState currentState = GameState::MainMenu;
     SDL_Event event;
 
@@ -46,6 +48,9 @@ int main(int argc, char* argv[]) {
             }
             else if (currentState == GameState::ControlsMenu) {
                 controlsMenu.HandleInput(event, currentState);
+            }
+            else if (currentState == GameState::SavesMenu) {
+                savesMenu.HandleInput(event, currentState);
             }
             else if (currentState == GameState::Gameplay) {
                 if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE) {
@@ -72,6 +77,12 @@ int main(int argc, char* argv[]) {
             SDL_RenderClear(renderer);
             
             controlsMenu.Render(renderer);
+        }
+        else if (currentState == GameState::SavesMenu) { 
+            SDL_SetRenderDrawColor(renderer, 30, 38, 46, 255);
+            SDL_RenderClear(renderer);
+            
+            savesMenu.Render(renderer);
         }
 
         SDL_RenderPresent(renderer);
