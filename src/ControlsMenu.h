@@ -1,5 +1,6 @@
 #pragma once
 #include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
 #include <vector>
 #include <string>
 #include "Menu.h"
@@ -19,12 +20,16 @@ public:
 
     SDL_Keycode GetKeyForAction(size_t index) const;
 
-    // Save/Load methods
     void SaveBindings();
     void LoadBindings();
 
 private:
     std::string GetConfigFilePath();
+    void RenderText(SDL_Renderer* renderer, TTF_Font* font, const char* text, float centerX, float centerY, SDL_Color color);
+
+    TTF_Font* fontTitle = nullptr;
+    TTF_Font* fontSubtext = nullptr;
+    TTF_Font* fontButton = nullptr;
 
     std::vector<KeyBinding> bindings;
     int selectedIndex;

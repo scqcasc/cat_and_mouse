@@ -2,10 +2,17 @@
 #include "Menu.h"
 #include "ControlsMenu.h"
 #include <SDL3/SDL_video.h>
+#include <SDL3_ttf/SDL_ttf.h>
 #include <iostream>
 
 int main(int argc, char* argv[]) {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
+        return -1;
+    }
+
+    if (!TTF_Init()) {
+        std::cerr << "Failed to initialize SDL_ttf: " << SDL_GetError() << std::endl;
+        SDL_Quit();
         return -1;
     }
 
@@ -73,6 +80,7 @@ int main(int argc, char* argv[]) {
 
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
+    TTF_Quit();
     SDL_Quit();
     return 0;
 }

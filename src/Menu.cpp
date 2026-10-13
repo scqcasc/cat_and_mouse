@@ -8,9 +8,20 @@ Menu::Menu() : selectedIndex(0) {
         "Manage Controls",
         "Exit Game"
     };
+
+    // Load custom TTF fonts at target sizes
+    fontTitle = TTF_OpenFont("assets/fonts/static/Roboto-Regular.ttf", 36.0f);
+    fontButton = TTF_OpenFont("assets/fonts/static/Roboto-Regular.ttf", 20.0f);
+
+    if (!fontTitle || !fontButton) {
+        std::cerr << "Failed to load TTF font: " << SDL_GetError() << std::endl;
+    }
 }
 
-Menu::~Menu() {}
+Menu::~Menu() {
+    if (fontTitle) TTF_CloseFont(fontTitle);
+    if (fontButton) TTF_CloseFont(fontButton);
+}
 
 void Menu::HandleInput(const SDL_Event& event, GameState& currentState) {
     if (event.type == SDL_EVENT_KEY_DOWN) {
@@ -29,20 +40,35 @@ void Menu::HandleInput(const SDL_Event& event, GameState& currentState) {
     }
 }
 
+// Helper to draw centered text on a target renderer
+void RenderCenteredText(SDL_Renderer* renderer, TTF_Font* font, const char* text, float centerX, float centerY, SDL_Color color) {
+    if (!font || !text) return;
+
+    SDL_Surface* surface = TTF_RenderText_Blended(font, text, 0, color);
+    if (!surface) return;
+
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+    if (texture) {
+        float dstX = centerX - ((float)surface->w / 2.0f);
+        float dstY = centerY - ((float)surface->h / 2.0f);
+        SDL_FRect dstRect{ dstX, dstY, (float)surface->w, (float)surface->h };
+
+        SDL_RenderTexture(renderer, texture, nullptr, &dstRect);
+        SDL_DestroyTexture(texture);
+    }
+    SDL_DestroySurface(surface);
+}
+
 void Menu::Render(SDL_Renderer* renderer) {
-    // Get current target dimensions dynamically
     int windowWidth = 0, windowHeight = 0;
     SDL_GetRenderOutputSize(renderer, &windowWidth, &windowHeight);
 
-    // Dynamic Title Centering
-    const char* titleText = "VULKAN ENGINE MAIN MENU";
-    int titleWidth = (int)strlen(titleText) * 8;
-    float titleX = ((float)windowWidth / 2.0f) - ((float)titleWidth / 2.0f);
-    
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    SDL_RenderDebugText(renderer, titleX, (float)windowHeight * 0.15f, titleText);
+    // 1. Draw Title
+    SDL_Color white = { 255, 255, 255, 255 };
+    RenderCenteredText(renderer, fontTitle, "VULKAN ENGINE MAIN MENU", 
+                       (float)windowWidth / 2.0f, (float)windowHeight * 0.15f, white);
 
-    // Vertical layout calculations
+    // 2. Draw Menu Buttons
     const int itemSpacing = 80;
     float totalMenuHeight = (menuOptions.size() * itemSpacing);
     float startY = ((float)windowHeight / 2.0f) - (totalMenuHeight / 2.0f) + 20.0f;
@@ -51,35 +77,30 @@ void Menu::Render(SDL_Renderer* renderer) {
     for (size_t i = 0; i < menuOptions.size(); ++i) {
         float currentY = startY + (i * itemSpacing);
 
-        // 1. Drop Shadow
+        // Button Shadow
         SDL_FRect shadowRect{ 
-            centerX + shadowOffset, 
-            currentY + shadowOffset, 
-            (float)buttonWidth, 
-            (float)buttonHeight 
+            centerX + shadowOffset, currentY + shadowOffset, 
+            (float)buttonWidth, (float)buttonHeight 
         };
         SDL_SetRenderDrawColor(renderer, 10, 15, 20, 200);
         SDL_RenderFillRect(renderer, &shadowRect);
 
-        // 2. Main Plate
+        // Button Plate
         SDL_FRect buttonRect{ centerX, currentY, (float)buttonWidth, (float)buttonHeight };
+        SDL_Color textColor;
 
         if ((int)i == selectedIndex) {
             SDL_SetRenderDrawColor(renderer, 235, 140, 20, 255); // Amber
-            SDL_RenderFillRect(renderer, &buttonRect);
-            SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);   // Charcoal Text
+            textColor = { 20, 20, 20, 255 };                    // Charcoal Text
         } else {
-            SDL_SetRenderDrawColor(renderer, 55, 68, 82, 255);  // Slate Grey
-            SDL_RenderFillRect(renderer, &buttonRect);
-            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255); // White Text
+            SDL_SetRenderDrawColor(renderer, 55, 68, 82, 255);   // Slate Grey
+            textColor = { 255, 255, 255, 255 };                 // White Text
         }
+        SDL_RenderFillRect(renderer, &buttonRect);
 
-        // 3. Center Text
-        int textWidth = (int)menuOptions[i].length() * 8;
-        int textHeight = 8;
-        float textX = centerX + ((float)buttonWidth / 2.0f) - ((float)textWidth / 2.0f);
-        float textY = currentY + ((float)buttonHeight / 2.0f) - ((float)textHeight / 2.0f);
-
-        SDL_RenderDebugText(renderer, textX, textY, menuOptions[i].c_str());
+        // Draw Centered Button Text
+        float buttonCenterX = centerX + ((float)buttonWidth / 2.0f);
+        float buttonCenterY = currentY + ((float)buttonHeight / 2.0f);
+        RenderCenteredText(renderer, fontButton, menuOptions[i].c_str(), buttonCenterX, buttonCenterY, textColor);
     }
 }

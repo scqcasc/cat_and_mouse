@@ -5,7 +5,6 @@
 #include <cstring>
 
 ControlsMenu::ControlsMenu() : selectedIndex(0), isRebinding(false) {
-    // Default Fallback Bindings
     bindings = {
         { "Move Left",    SDLK_A },
         { "Move Right",   SDLK_D },
@@ -16,22 +15,33 @@ ControlsMenu::ControlsMenu() : selectedIndex(0), isRebinding(false) {
         { "Jump",         SDLK_SPACE }
     };
 
-    // Load saved keybindings if they exist
+    // Load custom TTF fonts
+    fontTitle   = TTF_OpenFont("assets/fonts/static/Roboto-Regular.ttf", 32.0f);
+    fontSubtext = TTF_OpenFont("assets/fonts/static/Roboto-Regular.ttf", 18.0f);
+    fontButton  = TTF_OpenFont("assets/fonts/static/Roboto-Regular.ttf", 20.0f);
+
+    if (!fontTitle || !fontSubtext || !fontButton) {
+        std::cerr << "Failed to load ControlsMenu fonts: " << SDL_GetError() << std::endl;
+    }
+
+    // Load existing keybindings if present
     LoadBindings();
 }
 
-ControlsMenu::~ControlsMenu() {}
+ControlsMenu::~ControlsMenu() {
+    if (fontTitle)   TTF_CloseFont(fontTitle);
+    if (fontSubtext) TTF_CloseFont(fontSubtext);
+    if (fontButton)  TTF_CloseFont(fontButton);
+}
 
 std::string ControlsMenu::GetConfigFilePath() {
-    // SDL_GetPrefPath returns an OS-appropriate writable directory for user settings.
-    // Replace "MyCompany" and "MyVulkanGame" with your actual game/developer naming.
     char* prefPath = SDL_GetPrefPath("MyCompany", "MyVulkanGame");
     if (!prefPath) {
-        return "controls.cfg"; // Fallback to working directory if prefPath fails
+        return "controls.cfg";
     }
 
     std::string filePath = std::string(prefPath) + "controls.cfg";
-    SDL_free(prefPath); // Always free the string returned by SDL_GetPrefPath
+    SDL_free(prefPath);
     return filePath;
 }
 
@@ -45,7 +55,6 @@ void ControlsMenu::SaveBindings() {
     }
 
     for (const auto& binding : bindings) {
-        // Save as "ActionName:Keycode"
         outFile << binding.actionName << "=" << static_cast<int>(binding.keycode) << "\n";
     }
 
@@ -58,8 +67,7 @@ void ControlsMenu::LoadBindings() {
     std::ifstream inFile(path);
 
     if (!inFile.is_open()) {
-        // First boot or no config saved yet; default settings remain active
-        return;
+        return; // First launch, keep defaults
     }
 
     std::string line;
@@ -71,7 +79,6 @@ void ControlsMenu::LoadBindings() {
         if (std::getline(ss, actionName, '=') && std::getline(ss, keycodeStr)) {
             SDL_Keycode code = static_cast<SDL_Keycode>(std::stoi(keycodeStr));
 
-            // Map loaded keycode back to corresponding action
             for (auto& binding : bindings) {
                 if (binding.actionName == actionName) {
                     binding.keycode = code;
@@ -99,7 +106,7 @@ void ControlsMenu::HandleInput(const SDL_Event& event, GameState& currentState) 
         bindings[selectedIndex].keycode = event.key.key;
         isRebinding = false;
 
-        // Persist change immediately upon setting a new key
+        // Persist change upon rebind
         SaveBindings();
         return;
     }
@@ -118,20 +125,41 @@ void ControlsMenu::HandleInput(const SDL_Event& event, GameState& currentState) 
     }
 }
 
+void ControlsMenu::RenderText(SDL_Renderer* renderer, TTF_Font* font, const char* text, float centerX, float centerY, SDL_Color color) {
+    if (!font || !text) return;
+
+    SDL_Surface* surface = TTF_RenderText_Blended(font, text, 0, color);
+    if (!surface) return;
+
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+    if (texture) {
+        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+
+        float dstX = centerX - ((float)surface->w / 2.0f);
+        float dstY = centerY - ((float)surface->h / 2.0f);
+        SDL_FRect dstRect{ dstX, dstY, (float)surface->w, (float)surface->h };
+
+        SDL_RenderTexture(renderer, texture, nullptr, &dstRect);
+        SDL_DestroyTexture(texture);
+    }
+    SDL_DestroySurface(surface);
+}
+
 void ControlsMenu::Render(SDL_Renderer* renderer) {
     int windowWidth = 0, windowHeight = 0;
     SDL_GetRenderOutputSize(renderer, &windowWidth, &windowHeight);
 
-    const char* titleText = "CONTROLS CONFIGURATION";
-    const char* subtext = "UP/DOWN: Navigate | ENTER: Rebind | ESC: Back";
+    SDL_Color white = { 255, 255, 255, 255 };
+    SDL_Color subtextColor = { 200, 200, 200, 255 };
 
-    float titleX = ((float)windowWidth / 2.0f) - (((float)strlen(titleText) * 8.0f) / 2.0f);
-    float subtextX = ((float)windowWidth / 2.0f) - (((float)strlen(subtext) * 8.0f) / 2.0f);
+    // 1. Title & Navigation Subtext
+    RenderText(renderer, fontTitle, "CONTROLS CONFIGURATION", 
+               (float)windowWidth / 2.0f, (float)windowHeight * 0.08f, white);
 
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    SDL_RenderDebugText(renderer, titleX, (float)windowHeight * 0.08f, titleText);
-    SDL_RenderDebugText(renderer, subtextX, (float)windowHeight * 0.13f, subtext);
+    RenderText(renderer, fontSubtext, "UP/DOWN: Navigate | ENTER: Rebind | ESC: Back", 
+               (float)windowWidth / 2.0f, (float)windowHeight * 0.13f, subtextColor);
 
+    // 2. Button Items Layout Calculations
     const int itemSpacing = 60;
     float totalListHeight = (bindings.size() * itemSpacing);
     float startY = ((float)windowHeight / 2.0f) - (totalListHeight / 2.0f) + 30.0f;
@@ -140,6 +168,7 @@ void ControlsMenu::Render(SDL_Renderer* renderer) {
     for (size_t i = 0; i < bindings.size(); ++i) {
         float currentY = startY + (i * itemSpacing);
 
+        // Shadow Plate
         SDL_FRect shadowRect{ 
             centerX + shadowOffset, 
             currentY + shadowOffset, 
@@ -149,22 +178,24 @@ void ControlsMenu::Render(SDL_Renderer* renderer) {
         SDL_SetRenderDrawColor(renderer, 10, 15, 20, 200);
         SDL_RenderFillRect(renderer, &shadowRect);
 
+        // Main Button Plate & Text Color
         SDL_FRect buttonRect{ centerX, currentY, (float)buttonWidth, (float)buttonHeight };
+        SDL_Color textColor;
 
         if ((int)i == selectedIndex) {
             if (isRebinding) {
-                SDL_SetRenderDrawColor(renderer, 220, 50, 50, 255);
+                SDL_SetRenderDrawColor(renderer, 220, 50, 50, 255); // Red highlight during active rebinding
             } else {
-                SDL_SetRenderDrawColor(renderer, 235, 140, 20, 255);
+                SDL_SetRenderDrawColor(renderer, 235, 140, 20, 255); // Amber highlight
             }
-            SDL_RenderFillRect(renderer, &buttonRect);
-            SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
+            textColor = { 20, 20, 20, 255 };
         } else {
             SDL_SetRenderDrawColor(renderer, 55, 68, 82, 255);
-            SDL_RenderFillRect(renderer, &buttonRect);
-            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+            textColor = { 255, 255, 255, 255 };
         }
+        SDL_RenderFillRect(renderer, &buttonRect);
 
+        // Button Keybinding Text
         std::string keyName = SDL_GetKeyName(bindings[i].keycode);
         if (keyName.empty()) keyName = "UNKNOWN";
 
@@ -175,11 +206,9 @@ void ControlsMenu::Render(SDL_Renderer* renderer) {
             displayText = bindings[i].actionName + ": " + keyName;
         }
 
-        int textWidth = (int)displayText.length() * 8;
-        int textHeight = 8;
-        float textX = centerX + ((float)buttonWidth / 2.0f) - ((float)textWidth / 2.0f);
-        float textY = currentY + ((float)buttonHeight / 2.0f) - ((float)textHeight / 2.0f);
+        float buttonCenterX = centerX + ((float)buttonWidth / 2.0f);
+        float buttonCenterY = currentY + ((float)buttonHeight / 2.0f);
 
-        SDL_RenderDebugText(renderer, textX, textY, displayText.c_str());
+        RenderText(renderer, fontButton, displayText.c_str(), buttonCenterX, buttonCenterY, textColor);
     }
 }
