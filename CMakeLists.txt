@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Define our executable target explicitly
-add_executable(VulkanSDLGame src/main.cpp)
+add_executable(VulkanSDLGame src/main.cpp src/Menu.h src/Menu.cpp src/ControlsMenu.h src/ControlsMenu.cpp)
 
 if(WIN32)
     # --- WINDOWS CROSS-COMPILING CONFIGURATION ---
