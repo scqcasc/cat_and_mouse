@@ -56,9 +56,9 @@ The mouse is just looking for a nice place to call his own.  He likes food, shel
 
 ### The Human
 
-The human own the cat, and consider it the cat's job to rid the house of mice.  If the mouse irritates the human it will throw the cat outside.
+The human owns the cat, and consider it the cat's job to rid the house of mice.  If the mouse irritates the human it will throw the cat outside.
 
-The human moves from room to room.
+The human moves fluidly from room to room. 
 
 ## Items
 
