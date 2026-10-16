@@ -19,16 +19,24 @@ public:
     void Render(SDL_Renderer* renderer, TTF_Font* fontUI);
 
 private:
+    void IncreaseHumanIrritation(float amount);
     RoomID currentRoomID;
     std::map<RoomID, RoomState> house;
 
     int miceKilled = 0;
     int chancesRemaining = 3;
+    bool isGameOver = false;
     
     // Player State
     SDL_FRect catRect{ 200.0f, 200.0f, 40.0f, 40.0f };
     float catSpeed = 250.0f;
     float stunTimer = 0.0f;
+    bool isOutside = false;
+    float outsidePenaltyTimer = 0.0f;
+
+    // Human State
+    Human human;
+    RoomID humanRoomID = RoomID::LivingRoom;
 
     // Movement Direction Flags
     bool moveLeftPressed = false;
@@ -36,9 +44,12 @@ private:
     bool moveUpPressed = false;
     bool moveDownPressed = false;
 
-    // AI & HUD Helpers (Declared only once)
+    // Helper Methods
     void UpdateMice(float deltaTime);
+    void UpdateHuman(float deltaTime);
+    void ThrowCatOutside();
     void RenderMice(SDL_Renderer* renderer);
+    void RenderHuman(SDL_Renderer* renderer);
     void TriggerMeow();
     int GetTotalHouseMiceCount() const;
     void RenderHUD(SDL_Renderer* renderer, TTF_Font* fontUI);

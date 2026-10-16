@@ -8,19 +8,14 @@ enum class RoomID {
     MasterBedroom,
     GuestBedroom,
     Kitchen,
-    Hallway
+    Hallway,
+    Outside // Backyard/Front porch when thrown out
 };
 
 enum class MouseState {
     Wander,
     Flee,
     Stunned
-};
-
-enum class EntityType {
-    Cat,
-    Mouse,
-    Human
 };
 
 enum class ItemType {
@@ -31,9 +26,9 @@ enum class ItemType {
 };
 
 enum class FurnitureType {
-    Static,      // Stove, Counter, Bed, Refrigerator
-    Moveable,    // Lamp, Night Stand, Cabinet, TV
-    Flippable    // Coffee Table, Chair, Bookcase, Dining Table
+    Static,
+    Moveable,
+    Flippable
 };
 
 struct Furniture {
@@ -41,10 +36,6 @@ struct Furniture {
     SDL_FRect rect;
     FurnitureType type;
     bool isFlipped = false;
-    
-    // Direction vector for nudging/moving
-    float moveX = 0.0f;
-    float moveY = 0.0f;
 };
 
 struct Door {
@@ -59,9 +50,17 @@ struct Mouse {
     float dirX = 0.0f;
     float dirY = 0.0f;
     float changeDirTimer = 0.0f;
-    float squeakTimer = 0.0f;
+    float squeakTimer = 2.0f; // Countdown to squeaking
     float stunTimer = 0.0f;
     float speed = 120.0f;
+};
+
+struct Human {
+    SDL_FRect rect{ 600.0f, 250.0f, 45.0f, 75.0f };
+    float moveTimer = 14.0f;
+    float irritation = 0.0f;       // 0% to 100%
+    float touchCooldown = 0.0f;    // Prevents multi-touch spam
+    float decayDelayTimer = 0.0f;  // Delay before irritation begins dropping
 };
 
 struct RoomState {
