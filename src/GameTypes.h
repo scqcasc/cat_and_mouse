@@ -11,6 +11,12 @@ enum class RoomID {
     Hallway
 };
 
+enum class MouseState {
+    Wander,
+    Flee,
+    Stunned
+};
+
 enum class EntityType {
     Cat,
     Mouse,
@@ -47,11 +53,23 @@ struct Door {
     std::string label;
 };
 
+struct Mouse {
+    SDL_FRect rect{ 0.0f, 0.0f, 20.0f, 20.0f };
+    MouseState state = MouseState::Wander;
+    float dirX = 0.0f;
+    float dirY = 0.0f;
+    float changeDirTimer = 0.0f;
+    float squeakTimer = 0.0f;
+    float stunTimer = 0.0f;
+    float speed = 120.0f;
+};
+
 struct RoomState {
     RoomID id;
     std::string name;
     std::vector<Furniture> furniture;
     std::vector<Door> doors;
+    std::vector<Mouse> mice;
     bool humanPresent = false;
     int miceCount = 0;
 };
