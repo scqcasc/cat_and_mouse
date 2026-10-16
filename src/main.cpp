@@ -5,6 +5,7 @@
 #include <SDL3/SDL_video.h>
 #include <SDL3_ttf/SDL_ttf.h>
 #include <iostream>
+#include "Gameplay.h"
 
 int main(int argc, char* argv[]) {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -30,29 +31,35 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
+    // Load a font for the gameplay HUD
+    TTF_Font* fontUI = TTF_OpenFont("assets/fonts/static/Roboto-Regular.ttf", 18.0f);
+
+    if (!fontUI) {
+        std::cerr << "Failed to load gameplay fontUI: " << SDL_GetError() << std::endl;
+    }
+
     Menu mainMenu;
     ControlsMenu controlsMenu;
     SavesMenu savesMenu;
     GameState currentState = GameState::MainMenu;
     SDL_Event event;
+    Gameplay gameplay;
 
     uint64_t lastTime = SDL_GetTicksNS();
 
-    while (currentState != GameState::Exiting) {
+while (currentState != GameState::Exiting) {
+        // Calculate Delta Time
         uint64_t currentTime = SDL_GetTicksNS();
-        float deltaTime = (currentTime - lastTime) / 1000000000.0f; // Convert nanoseconds to seconds
+        float deltaTime = static_cast<float>(currentTime - lastTime) / 1000000000.0f;
         lastTime = currentTime;
 
-        // if (currentState == GameState::Gameplay) {
-        //     gameplay.Update(deltaTime);
-        // }
-
+        // --- 1. EVENT POLLING LOOP ---
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_EVENT_QUIT) {
                 currentState = GameState::Exiting;
             }
             
-            // Route inputs dynamically based on state
+            // Route input events to the current active state
             if (currentState == GameState::MainMenu) {
                 mainMenu.HandleInput(event, currentState);
             }
@@ -63,35 +70,36 @@ int main(int argc, char* argv[]) {
                 savesMenu.HandleInput(event, currentState);
             }
             else if (currentState == GameState::Gameplay) {
-                if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE) {
-                    currentState = GameState::MainMenu;
-                }
+                // Route KEY_DOWN and KEY_UP events to gameplay input handler
+                gameplay.HandleInput(event, currentState, controlsMenu);
             }
         }
 
-        // --- Render Execution ---
+        // --- 2. GAME STATE UPDATES (EVERY FRAME) ---
+        if (currentState == GameState::Gameplay) {
+            gameplay.Update(deltaTime, controlsMenu);
+        }
+
+        // --- 3. RENDER EXECUTION (EVERY FRAME) ---
         if (currentState == GameState::MainMenu) {
             SDL_SetRenderDrawColor(renderer, 30, 38, 46, 255);
             SDL_RenderClear(renderer);
-            
             mainMenu.Render(renderer);
         } 
         else if (currentState == GameState::Gameplay) {
-            SDL_SetRenderDrawColor(renderer, 38, 102, 51, 255);
+            SDL_SetRenderDrawColor(renderer, 38, 102, 51, 255); // Green Carpet
             SDL_RenderClear(renderer);
-            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-            SDL_RenderDebugText(renderer, 540, 340, "GAMEPLAY ACTIVE - PRESS ESC TO RETURN");
+            
+            gameplay.Render(renderer, fontUI); // Render world and HUD
         } 
         else if (currentState == GameState::ControlsMenu) {
             SDL_SetRenderDrawColor(renderer, 30, 38, 46, 255);
             SDL_RenderClear(renderer);
-            
             controlsMenu.Render(renderer);
         }
-        else if (currentState == GameState::SavesMenu) { 
+        else if (currentState == GameState::SavesMenu) {
             SDL_SetRenderDrawColor(renderer, 30, 38, 46, 255);
             SDL_RenderClear(renderer);
-            
             savesMenu.Render(renderer);
         }
 

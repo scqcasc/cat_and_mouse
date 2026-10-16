@@ -13,7 +13,8 @@ ControlsMenu::ControlsMenu() : selectedIndex(0), isRebinding(false) {
         { "Move Down",    SDLK_S },
         { "Pick Up Item", SDLK_G },
         { "Use Item",     SDLK_H },
-        { "Jump",         SDLK_SPACE }
+        { "Drop Item",    SDLK_J },
+        { "Meow",         SDLK_SPACE }
     };
 
     // Load custom TTF fonts

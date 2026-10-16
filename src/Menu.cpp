@@ -33,7 +33,10 @@ void Menu::HandleInput(const SDL_Event& event, GameState& currentState) {
             selectedIndex = (selectedIndex - 1 + menuOptions.size()) % menuOptions.size();
         }
         else if (event.key.key == SDLK_RETURN || event.key.key == SDLK_RETURN2) {
-            if (selectedIndex == 0)      currentState = GameState::Gameplay;
+            if (selectedIndex == 0)      {
+                std::cout << "Transitioning to Gameplay..." << std::endl; // Debug log
+                currentState = GameState::Gameplay;
+            }
             else if (selectedIndex == 1) currentState = GameState::SavesMenu;
             else if (selectedIndex == 2) currentState = GameState::ControlsMenu;
             else if (selectedIndex == 3) currentState = GameState::Exiting;

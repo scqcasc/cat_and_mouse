@@ -32,8 +32,7 @@ The player is the cat.  The cat wants to sleep in a sunbeam, or maybe scratch th
   * move/flip furniture
 * pick up item (one at a time)
 * drop item
-* use item
-* basic attack (without item)
+* use item/attack (without item)
 * meow
 
 ### Mouse

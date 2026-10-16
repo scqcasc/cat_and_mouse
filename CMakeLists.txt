@@ -15,6 +15,9 @@ add_executable(cat_and_mouse
     src/SavesMenu.cpp
     src/Helpers.h
     src/Helpers.cpp
+    src/GameTypes.h
+    src/Gameplay.h
+    src/Gameplay.cpp
 )
 
 if(WIN32)
