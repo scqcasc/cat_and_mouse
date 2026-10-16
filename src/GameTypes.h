@@ -57,10 +57,20 @@ struct Mouse {
 
 struct Human {
     SDL_FRect rect{ 600.0f, 250.0f, 45.0f, 75.0f };
-    float moveTimer = 14.0f;
+    float moveTimer = 14.0f;       // Time before deciding to leave room
     float irritation = 0.0f;       // 0% to 100%
-    float touchCooldown = 0.0f;    // Prevents multi-touch spam
-    float decayDelayTimer = 0.0f;  // Delay before irritation begins dropping
+    float touchCooldown = 0.0f;    // Cooldown for collision checks
+    float decayDelayTimer = 0.0f;  // Delay before anger decays
+
+    // Wandering Movement within room
+    float targetX = 600.0f;
+    float targetY = 250.0f;
+    float wanderSpeed = 60.0f;     // Slow walk speed
+    float pauseTimer = 0.0f;       // Brief pause between wandering points
+
+    // Door Exiting State
+    bool isHeadingToDoor = false;
+    RoomID nextRoomID = RoomID::LivingRoom;
 };
 
 struct RoomState {

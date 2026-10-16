@@ -19,6 +19,10 @@ public:
     void Render(SDL_Renderer* renderer, TTF_Font* fontUI);
 
 private:
+    int roundNumber = 1;
+    float roundBannerTimer = 0.0f; // Shows "Round X" banner at round start
+
+    void AdvanceToNextRound();
     void IncreaseHumanIrritation(float amount);
     RoomID currentRoomID;
     std::map<RoomID, RoomState> house;

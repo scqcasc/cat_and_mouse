@@ -11,6 +11,37 @@ Gameplay::Gameplay() {
 
 Gameplay::~Gameplay() {}
 
+void Gameplay::AdvanceToNextRound() {
+    roundNumber++;
+    roundBannerTimer = 3.0f; // Show "ROUND X" text on screen for 3 seconds
+    std::cout << "ROUND COMPLETED! Starting Round " << roundNumber << std::endl;
+
+    // Reset human anger
+    human.irritation = 0.0f;
+
+    // Re-populate house with mice (scaling count with round number)
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int> miceChance(1 + (roundNumber / 2), 3 + (roundNumber / 2));
+    std::uniform_real_distribution<float> posX(200.0f, 800.0f);
+    std::uniform_real_distribution<float> posY(200.0f, 500.0f);
+
+    for (auto& pair : house) {
+        RoomState& room = pair.second;
+        room.mice.clear();
+
+        int count = miceChance(gen);
+        for (int i = 0; i < count; ++i) {
+            Mouse m;
+            m.rect.x = posX(gen);
+            m.rect.y = posY(gen);
+            m.speed = 120.0f + (roundNumber * 10.0f); // Mice run slightly faster each round
+            room.mice.push_back(m);
+        }
+        room.miceCount = (int)room.mice.size();
+    }
+}
+
 void Gameplay::InitializeHouse() {
     house.clear();
 
@@ -151,36 +182,102 @@ void Gameplay::IncreaseHumanIrritation(float amount) {
 }
 
 void Gameplay::UpdateHuman(float deltaTime) {
-    human.moveTimer -= deltaTime;
-
     if (human.touchCooldown > 0.0f) {
         human.touchCooldown -= deltaTime;
     }
 
-    // --- Irritation Decay Logic ---
+    // --- 1. Irritation Decay Logic ---
     if (human.decayDelayTimer > 0.0f) {
         human.decayDelayTimer -= deltaTime;
     } 
     else if (human.irritation > 0.0f) {
-        // Gradually decrease anger by 15% per second when no mice bother the human
         human.irritation -= 15.0f * deltaTime;
         if (human.irritation < 0.0f) human.irritation = 0.0f;
     }
 
-    // Move human to a new room periodically
-    if (human.moveTimer <= 0.0f) {
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<int> roomDist(0, 4);
+    RoomState& currentRoom = house[humanRoomID];
 
-        house[humanRoomID].humanPresent = false;
-        humanRoomID = static_cast<RoomID>(roomDist(gen));
-        house[humanRoomID].humanPresent = true;
+    // --- 2. Check if timer expired to trigger room exit ---
+    if (!human.isHeadingToDoor) {
+        human.moveTimer -= deltaTime;
 
-        human.moveTimer = 14.0f;
-        human.irritation = 0.0f; // Reset anger on room change
-        human.decayDelayTimer = 0.0f;
-        std::cout << "Human walked into: " << house[humanRoomID].name << std::endl;
+        if (human.moveTimer <= 0.0f && !currentRoom.doors.empty()) {
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::uniform_int_distribution<size_t> doorDist(0, currentRoom.doors.size() - 1);
+
+            // Pick a random exit door in the current room
+            size_t doorIdx = doorDist(gen);
+            const Door& exitDoor = currentRoom.doors[doorIdx];
+
+            human.targetX = exitDoor.rect.x + (exitDoor.rect.w / 2.0f) - (human.rect.w / 2.0f);
+            human.targetY = exitDoor.rect.y + (exitDoor.rect.h / 2.0f) - (human.rect.h / 2.0f);
+            human.nextRoomID = exitDoor.targetRoom;
+            human.isHeadingToDoor = true;
+
+            std::cout << "Human decided to leave " << currentRoom.name 
+                      << " and head for the door to " << house[human.nextRoomID].name << std::endl;
+        }
+    }
+
+    // --- 3. Execute Movement (Wandering vs Heading to Door) ---
+    if (currentRoom.humanPresent) {
+        float dx = human.targetX - human.rect.x;
+        float dy = human.targetY - human.rect.y;
+        float distance = std::sqrt(dx * dx + dy * dy);
+
+        if (human.isHeadingToDoor) {
+            // Walk toward door at normal speed
+            if (distance < 10.0f) {
+                // Reached the door -> Complete transition to next room
+                house[humanRoomID].humanPresent = false;
+                humanRoomID = human.nextRoomID;
+                house[humanRoomID].humanPresent = true;
+
+                // Position human near entrance door of the new room
+                for (const auto& door : house[humanRoomID].doors) {
+                    if (door.targetRoom == currentRoom.id) {
+                        human.rect.x = door.rect.x;
+                        human.rect.y = door.rect.y;
+                        break;
+                    }
+                }
+
+                // Reset state for new room
+                human.isHeadingToDoor = false;
+                human.targetX = human.rect.x;
+                human.targetY = human.rect.y;
+                human.moveTimer = 14.0f;
+                human.irritation = 0.0f;
+                human.decayDelayTimer = 0.0f;
+
+                std::cout << "Human entered: " << house[humanRoomID].name << std::endl;
+            } else {
+                human.rect.x += (dx / distance) * (human.wanderSpeed * 1.2f) * deltaTime;
+                human.rect.y += (dy / distance) * (human.wanderSpeed * 1.2f) * deltaTime;
+            }
+        } 
+        else {
+            // Standard in-room wandering
+            if (human.pauseTimer > 0.0f) {
+                human.pauseTimer -= deltaTime;
+            } else {
+                if (distance < 5.0f) {
+                    std::random_device rd;
+                    std::mt19937 gen(rd());
+                    std::uniform_real_distribution<float> posX(150.0f, 1050.0f);
+                    std::uniform_real_distribution<float> posY(150.0f, 550.0f);
+                    std::uniform_real_distribution<float> pauseDist(1.0f, 3.0f);
+
+                    human.targetX = posX(gen);
+                    human.targetY = posY(gen);
+                    human.pauseTimer = pauseDist(gen);
+                } else {
+                    human.rect.x += (dx / distance) * human.wanderSpeed * deltaTime;
+                    human.rect.y += (dy / distance) * human.wanderSpeed * deltaTime;
+                }
+            }
+        }
     }
 }
 
@@ -278,6 +375,11 @@ void Gameplay::UpdateMice(float deltaTime) {
         currentRoom.mice.erase(currentRoom.mice.begin() + index);
         miceKilled++;
         currentRoom.miceCount = (int)currentRoom.mice.size();
+    }
+
+    // Check if round is cleared
+    if (GetTotalHouseMiceCount() == 0) {
+        AdvanceToNextRound();
     }
 }
 
@@ -401,6 +503,23 @@ void Gameplay::Update(float deltaTime, const ControlsMenu& controls) {
     // Update Systems
     UpdateHuman(deltaTime);
     UpdateMice(deltaTime);
+
+    // --- Cat Touches Human Check (-50% Irritation Reduction) ---
+    if (currentRoom.humanPresent && human.touchCooldown <= 0.0f) {
+        if (SDL_HasRectIntersectionFloat(&catRect, &human.rect)) {
+            if (human.irritation > 0.0f) {
+                human.irritation -= 50.0f;
+                if (human.irritation < 0.0f) human.irritation = 0.0f;
+                std::cout << "*CAT RUBBED HUMAN! Anger decreased by 50%! Current: " 
+                          << human.irritation << "%*" << std::endl;
+            }
+            human.touchCooldown = 1.5f; // 1.5s cooldown before cat can calm them again
+        }
+    }
+
+    if (roundBannerTimer > 0.0f) {
+        roundBannerTimer -= deltaTime;
+    }
 }
 
 int Gameplay::GetTotalHouseMiceCount() const {
@@ -446,6 +565,7 @@ void Gameplay::RenderHUD(SDL_Renderer* renderer, TTF_Font* fontUI) {
 
     SDL_Color white = { 255, 255, 255, 255 };
     SDL_Color cyan  = { 80, 210, 240, 255 };
+    SDL_Color yellow = { 240, 200, 40, 255 };
     SDL_Color red   = { 240, 60, 60, 255 };
 
     if (isGameOver) {
@@ -494,6 +614,13 @@ void Gameplay::RenderHUD(SDL_Renderer* renderer, TTF_Font* fontUI) {
     // White Border around Progress Bar
     SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
     SDL_RenderRect(renderer, &bgBarRect);
+
+    // Draw Round Banner Overlay
+    if (roundBannerTimer > 0.0f) {
+        std::string roundText = "ROUND " + std::to_string(roundNumber) + " START!";
+        Helpers::RenderCenteredText(renderer, fontUI, roundText.c_str(), 
+                                   (float)windowWidth / 2.0f, (float)windowHeight / 2.0f, yellow);
+    }
 }
 
 void Gameplay::Render(SDL_Renderer* renderer, TTF_Font* fontUI) {
