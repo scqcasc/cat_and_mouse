@@ -11,37 +11,6 @@ Gameplay::Gameplay() {
 
 Gameplay::~Gameplay() {}
 
-void Gameplay::AdvanceToNextRound() {
-    roundNumber++;
-    roundBannerTimer = 3.0f; // Show "ROUND X" text on screen for 3 seconds
-    std::cout << "ROUND COMPLETED! Starting Round " << roundNumber << std::endl;
-
-    // Reset human anger
-    human.irritation = 0.0f;
-
-    // Re-populate house with mice (scaling count with round number)
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<int> miceChance(1 + (roundNumber / 2), 3 + (roundNumber / 2));
-    std::uniform_real_distribution<float> posX(200.0f, 800.0f);
-    std::uniform_real_distribution<float> posY(200.0f, 500.0f);
-
-    for (auto& pair : house) {
-        RoomState& room = pair.second;
-        room.mice.clear();
-
-        int count = miceChance(gen);
-        for (int i = 0; i < count; ++i) {
-            Mouse m;
-            m.rect.x = posX(gen);
-            m.rect.y = posY(gen);
-            m.speed = 120.0f + (roundNumber * 10.0f); // Mice run slightly faster each round
-            room.mice.push_back(m);
-        }
-        room.miceCount = (int)room.mice.size();
-    }
-}
-
 void Gameplay::InitializeHouse() {
     house.clear();
 
@@ -62,13 +31,14 @@ void Gameplay::InitializeHouse() {
         return miceList;
     };
 
-    // 1. Living Room
+    // 1. Living Room (Contains Slingshot)
     RoomState livingRoom;
     livingRoom.id = RoomID::LivingRoom;
     livingRoom.name = "Living Room";
-    livingRoom.humanPresent = true; // Human starts in Living Room
+    livingRoom.humanPresent = true;
     livingRoom.mice = PopulateMice(miceChance(gen));
     livingRoom.miceCount = (int)livingRoom.mice.size();
+    livingRoom.items = { { { 700.0f, 350.0f, 22.0f, 22.0f }, ItemType::Slingshot, 5, true } };
     livingRoom.furniture = {
         { "Couch",        { 300, 200, 160, 80 },  FurnitureType::Moveable },
         { "Coffee Table", { 340, 320, 80,  40 },  FurnitureType::Flippable },
@@ -81,12 +51,13 @@ void Gameplay::InitializeHouse() {
     };
     house[RoomID::LivingRoom] = livingRoom;
 
-    // 2. Kitchen
+    // 2. Kitchen (Contains Toy Robot)
     RoomState kitchen;
     kitchen.id = RoomID::Kitchen;
     kitchen.name = "Kitchen";
     kitchen.mice = PopulateMice(miceChance(gen));
     kitchen.miceCount = (int)kitchen.mice.size();
+    kitchen.items = { { { 300.0f, 450.0f, 22.0f, 22.0f }, ItemType::ToyRobot, 2, true } };
     kitchen.furniture = {
         { "Stove",        { 100, 120, 80, 80 },   FurnitureType::Static },
         { "Refrigerator", { 200, 120, 80, 90 },   FurnitureType::Static },
@@ -114,12 +85,13 @@ void Gameplay::InitializeHouse() {
     };
     house[RoomID::Hallway] = hallway;
 
-    // 4. Master Bedroom
+    // 4. Master Bedroom (Contains Laser Blaster)
     RoomState masterBed;
     masterBed.id = RoomID::MasterBedroom;
     masterBed.name = "Master Bedroom";
     masterBed.mice = PopulateMice(miceChance(gen));
     masterBed.miceCount = (int)masterBed.mice.size();
+    masterBed.items = { { { 600.0f, 220.0f, 22.0f, 22.0f }, ItemType::LaserBlaster, 3, true } };
     masterBed.furniture = {
         { "Bed",         { 200, 180, 140, 180 }, FurnitureType::Static },
         { "Night Stand", { 140, 180, 50, 50 },   FurnitureType::Moveable },
@@ -146,6 +118,369 @@ void Gameplay::InitializeHouse() {
     house[RoomID::GuestBedroom] = guestBed;
 }
 
+void Gameplay::UseEquippedItem() {
+    if (equippedItem == ItemType::None || itemAmmo <= 0) return;
+
+    itemAmmo--;
+    std::cout << "Used Item! Ammo remaining: " << itemAmmo << std::endl;
+
+    Projectile p;
+    p.rect.x = catRect.x + (catRect.w / 2.0f) - 4.0f;
+    p.rect.y = catRect.y + (catRect.h / 2.0f) - 4.0f;
+    p.dirX = lastFacingX;
+    p.dirY = lastFacingY;
+    p.type = equippedItem;
+
+    if (equippedItem == ItemType::Slingshot) {
+        p.speed = 550.0f;
+    } else if (equippedItem == ItemType::LaserBlaster) {
+        p.speed = 850.0f;
+    }
+
+    activeProjectiles.push_back(p);
+
+    if (itemAmmo <= 0) {
+        equippedItem = ItemType::None;
+    }
+}
+
+void Gameplay::UpdateProjectiles(float deltaTime) {
+    RoomState& currentRoom = house[currentRoomID];
+    std::vector<size_t> expiredProjectiles;
+
+    for (size_t i = 0; i < activeProjectiles.size(); ++i) {
+        Projectile& p = activeProjectiles[i];
+        p.lifetime -= deltaTime;
+
+        p.rect.x += p.dirX * p.speed * deltaTime;
+        p.rect.y += p.dirY * p.speed * deltaTime;
+
+        if (p.lifetime <= 0.0f) {
+            expiredProjectiles.push_back(i);
+            continue;
+        }
+
+        // Check collision with mice
+        for (auto& mouse : currentRoom.mice) {
+            if (SDL_HasRectIntersectionFloat(&p.rect, &mouse.rect)) {
+                mouse.state = MouseState::Stunned;
+                mouse.stunTimer = 4.0f; // Stun mouse for 4 seconds
+                std::cout << "MOUSE STUNNED BY PROJECTILE!" << std::endl;
+                expiredProjectiles.push_back(i);
+                break;
+            }
+        }
+    }
+
+    // Erase expired/hit projectiles backwards
+    for (int i = (int)expiredProjectiles.size() - 1; i >= 0; --i) {
+        size_t index = expiredProjectiles[i];
+        if (index < activeProjectiles.size()) {
+            activeProjectiles.erase(activeProjectiles.begin() + index);
+        }
+    }
+}
+
+void Gameplay::HandleInput(const SDL_Event& event, GameState& currentState, const ControlsMenu& controls) {
+    if (event.type == SDL_EVENT_KEY_DOWN) {
+        if (event.key.key == SDLK_ESCAPE) {
+            currentState = GameState::MainMenu;
+            return;
+        }
+
+        if (event.key.key == controls.GetKeyForAction(0)) moveLeftPressed = true;
+        if (event.key.key == controls.GetKeyForAction(1)) moveRightPressed = true;
+        if (event.key.key == controls.GetKeyForAction(2)) moveUpPressed = true;
+        if (event.key.key == controls.GetKeyForAction(3)) moveDownPressed = true;
+
+        if (event.key.key == controls.GetKeyForAction(4)) { // Action / Use Item
+            UseEquippedItem();
+        }
+        if (event.key.key == controls.GetKeyForAction(5)) { // Meow Key
+            TriggerMeow();
+        }
+    }
+    else if (event.type == SDL_EVENT_KEY_UP) {
+        if (event.key.key == controls.GetKeyForAction(0)) moveLeftPressed = false;
+        if (event.key.key == controls.GetKeyForAction(1)) moveRightPressed = false;
+        if (event.key.key == controls.GetKeyForAction(2)) moveUpPressed = false;
+        if (event.key.key == controls.GetKeyForAction(3)) moveDownPressed = false;
+    }
+}
+
+void Gameplay::Update(float deltaTime, const ControlsMenu& controls) {
+    if (isGameOver) return;
+
+    if (roundBannerTimer > 0.0f) {
+        roundBannerTimer -= deltaTime;
+    }
+
+    if (outsidePenaltyTimer > 0.0f) {
+        outsidePenaltyTimer -= deltaTime;
+        if (outsidePenaltyTimer <= 0.0f) {
+            isOutside = false;
+        }
+    }
+
+    if (stunTimer > 0.0f) {
+        stunTimer -= deltaTime;
+        return;
+    }
+
+    float moveX = 0.0f;
+    float moveY = 0.0f;
+
+    if (moveLeftPressed)  moveX -= 1.0f;
+    if (moveRightPressed) moveX += 1.0f;
+    if (moveUpPressed)    moveY -= 1.0f;
+    if (moveDownPressed)  moveY += 1.0f;
+
+    if (moveX != 0.0f || moveY != 0.0f) {
+        lastFacingX = moveX;
+        lastFacingY = moveY;
+    }
+
+    if (moveX != 0.0f && moveY != 0.0f) {
+        moveX *= 0.7071f;
+        moveY *= 0.7071f;
+    }
+
+    RoomState& currentRoom = house[currentRoomID];
+
+    // Cat Movement & Furniture Collision
+    catRect.x += moveX * catSpeed * deltaTime;
+    for (auto& item : currentRoom.furniture) {
+        if (SDL_HasRectIntersectionFloat(&catRect, &item.rect)) {
+            if (item.type == FurnitureType::Static) {
+                if (moveX > 0) catRect.x = item.rect.x - catRect.w;
+                else if (moveX < 0) catRect.x = item.rect.x + item.rect.w;
+            } else {
+                item.rect.x += moveX * (catSpeed * 0.4f) * deltaTime;
+            }
+        }
+    }
+
+    catRect.y += moveY * catSpeed * deltaTime;
+    for (auto& item : currentRoom.furniture) {
+        if (SDL_HasRectIntersectionFloat(&catRect, &item.rect)) {
+            if (item.type == FurnitureType::Static) {
+                if (moveY > 0) catRect.y = item.rect.y - catRect.h;
+                else if (moveY < 0) catRect.y = item.rect.y + item.rect.h;
+            } else {
+                item.rect.y += moveY * (catSpeed * 0.4f) * deltaTime;
+            }
+        }
+    }
+
+    // Door Transitions
+    for (const auto& door : currentRoom.doors) {
+        if (SDL_HasRectIntersectionFloat(&catRect, &door.rect)) {
+            moveLeftPressed = moveRightPressed = moveUpPressed = moveDownPressed = false;
+            SwitchRoom(door.targetRoom, currentRoomID);
+            break;
+        }
+    }
+
+    // Item Pickups
+    for (auto& item : currentRoom.items) {
+        if (item.spawned && SDL_HasRectIntersectionFloat(&catRect, &item.rect)) {
+            item.spawned = false;
+            equippedItem = item.type;
+            itemAmmo = item.ammo;
+            std::cout << "PICKED UP ITEM! Equipped Ammo: " << itemAmmo << std::endl;
+        }
+    }
+
+    // Cat Touches Human Check (-50% Anger Soothe)
+    if (currentRoom.humanPresent && human.touchCooldown <= 0.0f) {
+        if (SDL_HasRectIntersectionFloat(&catRect, &human.rect)) {
+            if (human.irritation > 0.0f) {
+                human.irritation -= 50.0f;
+                if (human.irritation < 0.0f) human.irritation = 0.0f;
+                std::cout << "*CAT RUBBED HUMAN! Anger decreased by 50%! Current: " 
+                          << human.irritation << "%*" << std::endl;
+            }
+            human.touchCooldown = 1.5f;
+        }
+    }
+
+    // Update Subsystems
+    UpdateHuman(deltaTime);
+    UpdateMice(deltaTime);
+    UpdateProjectiles(deltaTime);
+}
+
+void Gameplay::RenderItems(SDL_Renderer* renderer) {
+    const RoomState& currentRoom = house[currentRoomID];
+
+    for (const auto& item : currentRoom.items) {
+        if (!item.spawned) continue;
+
+        if (item.type == ItemType::Slingshot) {
+            SDL_SetRenderDrawColor(renderer, 220, 60, 220, 255); // Magenta Slingshot
+        } else if (item.type == ItemType::LaserBlaster) {
+            SDL_SetRenderDrawColor(renderer, 60, 220, 240, 255); // Cyan Laser
+        } else if (item.type == ItemType::ToyRobot) {
+            SDL_SetRenderDrawColor(renderer, 60, 220, 60, 255);  // Lime Robot
+        }
+        SDL_RenderFillRect(renderer, &item.rect);
+    }
+}
+
+void Gameplay::RenderProjectiles(SDL_Renderer* renderer) {
+    for (const auto& p : activeProjectiles) {
+        if (p.type == ItemType::Slingshot) {
+            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255); // White Pellets
+        } else if (p.type == ItemType::LaserBlaster) {
+            SDL_SetRenderDrawColor(renderer, 0, 255, 255, 255);   // Cyan Beams
+        }
+        SDL_RenderFillRect(renderer, &p.rect);
+    }
+}
+
+void Gameplay::RenderHUD(SDL_Renderer* renderer, TTF_Font* fontUI) {
+    int windowWidth = 0, windowHeight = 0;
+    SDL_GetRenderOutputSize(renderer, &windowWidth, &windowHeight);
+
+    SDL_FRect hudBar{ 0.0f, 0.0f, (float)windowWidth, 50.0f };
+    SDL_SetRenderDrawColor(renderer, 20, 25, 30, 230);
+    SDL_RenderFillRect(renderer, &hudBar);
+
+    SDL_Color white  = { 255, 255, 255, 255 };
+    SDL_Color cyan   = { 80, 210, 240, 255 };
+    SDL_Color yellow = { 240, 200, 40, 255 };
+    SDL_Color red    = { 240, 60, 60, 255 };
+
+    if (roundBannerTimer > 0.0f && fontUI) {
+        std::string roundText = "ROUND " + std::to_string(roundNumber) + " START!";
+        Helpers::RenderCenteredText(renderer, fontUI, roundText.c_str(), 
+                                   (float)windowWidth / 2.0f, (float)windowHeight / 2.0f, yellow);
+    }
+
+    if (!fontUI) return;
+
+    if (isGameOver) {
+        Helpers::RenderCenteredText(renderer, fontUI, "GAME OVER! TAKEN TO THE POUND!", 
+                                   (float)windowWidth / 2.0f, 25.0f, red);
+        return;
+    }
+
+    const RoomState& activeRoom = house[currentRoomID];
+
+    // Stats Text
+    std::string roomText = "Room: " + activeRoom.name;
+    std::string miceText = "Mice: " + std::to_string(activeRoom.mice.size()) + 
+                           " (Total: " + std::to_string(GetTotalHouseMiceCount()) + ")";
+    std::string livesText = "Chances: " + std::to_string(chancesRemaining);
+
+    std::string itemText = "Item: ";
+    if (equippedItem == ItemType::Slingshot) itemText += "Slingshot (" + std::to_string(itemAmmo) + ")";
+    else if (equippedItem == ItemType::LaserBlaster) itemText += "Laser (" + std::to_string(itemAmmo) + ")";
+    else if (equippedItem == ItemType::ToyRobot) itemText += "Robot (" + std::to_string(itemAmmo) + ")";
+    else itemText += "None";
+
+    Helpers::RenderCenteredText(renderer, fontUI, roomText.c_str(), 100.0f, 25.0f, cyan);
+    Helpers::RenderCenteredText(renderer, fontUI, miceText.c_str(), (float)windowWidth * 0.32f, 25.0f, white);
+    Helpers::RenderCenteredText(renderer, fontUI, itemText.c_str(), (float)windowWidth * 0.52f, 25.0f, yellow);
+
+    // Human Anger Progress Bar
+    float barWidth = 120.0f;
+    float barHeight = 18.0f;
+    float barX = (float)windowWidth * 0.76f - (barWidth / 2.0f);
+    float barY = 16.0f;
+
+    Helpers::RenderCenteredText(renderer, fontUI, "Anger:", barX - 35.0f, 25.0f, white);
+
+    SDL_FRect bgBarRect{ barX, barY, barWidth, barHeight };
+    SDL_SetRenderDrawColor(renderer, 50, 20, 20, 255);
+    SDL_RenderFillRect(renderer, &bgBarRect);
+
+    float fillWidth = (human.irritation / 100.0f) * barWidth;
+    SDL_FRect fillBarRect{ barX, barY, fillWidth, barHeight };
+
+    if (human.irritation >= 70.0f) {
+        SDL_SetRenderDrawColor(renderer, 240, 60, 60, 255);
+    } else {
+        SDL_SetRenderDrawColor(renderer, 240, 180, 40, 255);
+    }
+    SDL_RenderFillRect(renderer, &fillBarRect);
+
+    SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
+    SDL_RenderRect(renderer, &bgBarRect);
+
+    Helpers::RenderCenteredText(renderer, fontUI, livesText.c_str(), (float)windowWidth - 70.0f, 25.0f, white);
+}
+
+void Gameplay::Render(SDL_Renderer* renderer, TTF_Font* fontUI) {
+    const RoomState& currentRoom = house[currentRoomID];
+
+    // 1. Render Doors
+    SDL_SetRenderDrawColor(renderer, 120, 70, 30, 255);
+    for (const auto& door : currentRoom.doors) {
+        SDL_RenderFillRect(renderer, &door.rect);
+    }
+
+    // 2. Render Furniture
+    for (const auto& item : currentRoom.furniture) {
+        if (item.type == FurnitureType::Static) {
+            SDL_SetRenderDrawColor(renderer, 100, 110, 120, 255);
+        } else if (item.type == FurnitureType::Moveable) {
+            SDL_SetRenderDrawColor(renderer, 160, 100, 60, 255);
+        } else {
+            SDL_SetRenderDrawColor(renderer, 180, 140, 80, 255);
+        }
+        SDL_RenderFillRect(renderer, &item.rect);
+    }
+
+    // 3. Render Items
+    RenderItems(renderer);
+
+    // 4. Render Projectiles
+    RenderProjectiles(renderer);
+
+    // 5. Render Human
+    RenderHuman(renderer);
+
+    // 6. Render Mice
+    RenderMice(renderer);
+
+    // 7. Render Cat
+    SDL_SetRenderDrawColor(renderer, 240, 130, 40, 255);
+    SDL_RenderFillRect(renderer, &catRect);
+
+    // 8. Render HUD
+    RenderHUD(renderer, fontUI);
+}
+
+void Gameplay::TriggerMeow() {
+    std::cout << "MEOW! Scared nearby mice!" << std::endl;
+    RoomState& currentRoom = house[currentRoomID];
+    
+    for (auto& mouse : currentRoom.mice) {
+        if (mouse.state != MouseState::Stunned) {
+            mouse.state = MouseState::Flee;
+        }
+    }
+}
+
+void Gameplay::SwitchRoom(RoomID nextRoom, RoomID previousRoom) {
+    currentRoomID = nextRoom;
+
+    for (const auto& door : house[currentRoomID].doors) {
+        if (door.targetRoom == previousRoom) {
+            catRect.x = door.rect.x;
+            catRect.y = door.rect.y;
+
+            if (door.rect.w > door.rect.h) {
+                catRect.y += (door.rect.y < 200.0f) ? 50.0f : -50.0f;
+            } else {
+                catRect.x += (door.rect.x < 200.0f) ? 50.0f : -50.0f;
+            }
+            break;
+        }
+    }
+}
+
 void Gameplay::ThrowCatOutside() {
     chancesRemaining--;
     std::cout << "HUMAN THREW THE CAT OUTSIDE! Chances left: " << chancesRemaining << std::endl;
@@ -156,10 +491,9 @@ void Gameplay::ThrowCatOutside() {
         return;
     }
 
-    // Place cat outside on the porch
     isOutside = true;
-    outsidePenaltyTimer = 5.0f; // 5-second penalty lock outside
-    currentRoomID = RoomID::LivingRoom; // Resets back near Living Room front door
+    outsidePenaltyTimer = 5.0f;
+    currentRoomID = RoomID::LivingRoom;
     catRect.x = 100.0f;
     catRect.y = 100.0f;
 }
@@ -170,7 +504,6 @@ void Gameplay::IncreaseHumanIrritation(float amount) {
     human.irritation += amount;
     if (human.irritation > 100.0f) human.irritation = 100.0f;
 
-    // Reset the decay delay timer (3 seconds of peace required before calming down)
     human.decayDelayTimer = 3.0f;
 
     std::cout << "Human Irritation increased to: " << human.irritation << "%" << std::endl;
@@ -181,12 +514,41 @@ void Gameplay::IncreaseHumanIrritation(float amount) {
     }
 }
 
+void Gameplay::AdvanceToNextRound() {
+    roundNumber++;
+    roundBannerTimer = 3.0f;
+    std::cout << "ROUND COMPLETED! Starting Round " << roundNumber << std::endl;
+
+    human.irritation = 0.0f;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int> miceChance(1 + (roundNumber / 2), 3 + (roundNumber / 2));
+    std::uniform_real_distribution<float> posX(200.0f, 800.0f);
+    std::uniform_real_distribution<float> posY(200.0f, 500.0f);
+
+    for (auto& pair : house) {
+        RoomState& room = pair.second;
+        room.mice.clear();
+
+        int count = miceChance(gen);
+        for (int i = 0; i < count; ++i) {
+            Mouse m;
+            m.rect.x = posX(gen);
+            m.rect.y = posY(gen);
+            m.speed = 120.0f + (roundNumber * 10.0f);
+            room.mice.push_back(m);
+        }
+        room.miceCount = (int)room.mice.size();
+    }
+}
+
 void Gameplay::UpdateHuman(float deltaTime) {
     if (human.touchCooldown > 0.0f) {
         human.touchCooldown -= deltaTime;
     }
 
-    // --- 1. Irritation Decay Logic ---
+    // Irritation Decay Logic
     if (human.decayDelayTimer > 0.0f) {
         human.decayDelayTimer -= deltaTime;
     } 
@@ -197,7 +559,7 @@ void Gameplay::UpdateHuman(float deltaTime) {
 
     RoomState& currentRoom = house[humanRoomID];
 
-    // --- 2. Check if timer expired to trigger room exit ---
+    // Room Exit Trigger
     if (!human.isHeadingToDoor) {
         human.moveTimer -= deltaTime;
 
@@ -206,7 +568,6 @@ void Gameplay::UpdateHuman(float deltaTime) {
             std::mt19937 gen(rd());
             std::uniform_int_distribution<size_t> doorDist(0, currentRoom.doors.size() - 1);
 
-            // Pick a random exit door in the current room
             size_t doorIdx = doorDist(gen);
             const Door& exitDoor = currentRoom.doors[doorIdx];
 
@@ -214,27 +575,21 @@ void Gameplay::UpdateHuman(float deltaTime) {
             human.targetY = exitDoor.rect.y + (exitDoor.rect.h / 2.0f) - (human.rect.h / 2.0f);
             human.nextRoomID = exitDoor.targetRoom;
             human.isHeadingToDoor = true;
-
-            std::cout << "Human decided to leave " << currentRoom.name 
-                      << " and head for the door to " << house[human.nextRoomID].name << std::endl;
         }
     }
 
-    // --- 3. Execute Movement (Wandering vs Heading to Door) ---
+    // Human Movement Executions
     if (currentRoom.humanPresent) {
         float dx = human.targetX - human.rect.x;
         float dy = human.targetY - human.rect.y;
         float distance = std::sqrt(dx * dx + dy * dy);
 
         if (human.isHeadingToDoor) {
-            // Walk toward door at normal speed
             if (distance < 10.0f) {
-                // Reached the door -> Complete transition to next room
                 house[humanRoomID].humanPresent = false;
                 humanRoomID = human.nextRoomID;
                 house[humanRoomID].humanPresent = true;
 
-                // Position human near entrance door of the new room
                 for (const auto& door : house[humanRoomID].doors) {
                     if (door.targetRoom == currentRoom.id) {
                         human.rect.x = door.rect.x;
@@ -243,22 +598,18 @@ void Gameplay::UpdateHuman(float deltaTime) {
                     }
                 }
 
-                // Reset state for new room
                 human.isHeadingToDoor = false;
                 human.targetX = human.rect.x;
                 human.targetY = human.rect.y;
                 human.moveTimer = 14.0f;
                 human.irritation = 0.0f;
                 human.decayDelayTimer = 0.0f;
-
-                std::cout << "Human entered: " << house[humanRoomID].name << std::endl;
             } else {
                 human.rect.x += (dx / distance) * (human.wanderSpeed * 1.2f) * deltaTime;
                 human.rect.y += (dy / distance) * (human.wanderSpeed * 1.2f) * deltaTime;
             }
         } 
         else {
-            // Standard in-room wandering
             if (human.pauseTimer > 0.0f) {
                 human.pauseTimer -= deltaTime;
             } else {
@@ -303,19 +654,8 @@ void Gameplay::UpdateMice(float deltaTime) {
             m.squeakTimer -= deltaTime;
             if (m.squeakTimer <= 0.0f) {
                 m.squeakTimer = 5.0f;
-                std::cout << "*SQUEAK!*" << std::endl;
-
                 if (currentRoom.humanPresent) {
                     IncreaseHumanIrritation(10.0f);
-                }
-            }
-
-            // Mouse touches Human Check (+20% Irritation)
-            if (currentRoom.humanPresent && human.touchCooldown <= 0.0f) {
-                if (SDL_HasRectIntersectionFloat(&m.rect, &human.rect)) {
-                    std::cout << "*MOUSE TOUCHED HUMAN!*" << std::endl;
-                    IncreaseHumanIrritation(20.0f);
-                    human.touchCooldown = 1.0f; // 1 second cooldown before re-triggering
                 }
             }
 
@@ -377,148 +717,8 @@ void Gameplay::UpdateMice(float deltaTime) {
         currentRoom.miceCount = (int)currentRoom.mice.size();
     }
 
-    // Check if round is cleared
     if (GetTotalHouseMiceCount() == 0) {
         AdvanceToNextRound();
-    }
-}
-
-void Gameplay::TriggerMeow() {
-    std::cout << "MEOW! Scared nearby mice!" << std::endl;
-    RoomState& currentRoom = house[currentRoomID];
-    
-    for (auto& mouse : currentRoom.mice) {
-        if (mouse.state != MouseState::Stunned) {
-            mouse.state = MouseState::Flee;
-        }
-    }
-}
-
-void Gameplay::SwitchRoom(RoomID nextRoom, RoomID previousRoom) {
-    currentRoomID = nextRoom;
-
-    for (const auto& door : house[currentRoomID].doors) {
-        if (door.targetRoom == previousRoom) {
-            catRect.x = door.rect.x;
-            catRect.y = door.rect.y;
-
-            if (door.rect.w > door.rect.h) {
-                catRect.y += (door.rect.y < 200.0f) ? 50.0f : -50.0f;
-            } else {
-                catRect.x += (door.rect.x < 200.0f) ? 50.0f : -50.0f;
-            }
-            break;
-        }
-    }
-}
-
-void Gameplay::HandleInput(const SDL_Event& event, GameState& currentState, const ControlsMenu& controls) {
-    if (event.type == SDL_EVENT_KEY_DOWN) {
-        if (event.key.key == SDLK_ESCAPE) {
-            currentState = GameState::MainMenu;
-            return;
-        }
-
-        if (event.key.key == controls.GetKeyForAction(0)) moveLeftPressed = true;
-        if (event.key.key == controls.GetKeyForAction(1)) moveRightPressed = true;
-        if (event.key.key == controls.GetKeyForAction(2)) moveUpPressed = true;
-        if (event.key.key == controls.GetKeyForAction(3)) moveDownPressed = true;
-
-        if (event.key.key == controls.GetKeyForAction(5)) {
-            TriggerMeow();
-        }
-    }
-    else if (event.type == SDL_EVENT_KEY_UP) {
-        if (event.key.key == controls.GetKeyForAction(0)) moveLeftPressed = false;
-        if (event.key.key == controls.GetKeyForAction(1)) moveRightPressed = false;
-        if (event.key.key == controls.GetKeyForAction(2)) moveUpPressed = false;
-        if (event.key.key == controls.GetKeyForAction(3)) moveDownPressed = false;
-    }
-}
-
-void Gameplay::Update(float deltaTime, const ControlsMenu& controls) {
-    if (isGameOver) return;
-
-    if (outsidePenaltyTimer > 0.0f) {
-        outsidePenaltyTimer -= deltaTime;
-        if (outsidePenaltyTimer <= 0.0f) {
-            isOutside = false; // Penalty elapsed, cat can go back inside
-        }
-    }
-
-    if (stunTimer > 0.0f) {
-        stunTimer -= deltaTime;
-        return;
-    }
-
-    float moveX = 0.0f;
-    float moveY = 0.0f;
-
-    if (moveLeftPressed)  moveX -= 1.0f;
-    if (moveRightPressed) moveX += 1.0f;
-    if (moveUpPressed)    moveY -= 1.0f;
-    if (moveDownPressed)  moveY += 1.0f;
-
-    if (moveX != 0.0f && moveY != 0.0f) {
-        moveX *= 0.7071f;
-        moveY *= 0.7071f;
-    }
-
-    RoomState& currentRoom = house[currentRoomID];
-
-    // Cat Movement & Furniture Collision
-    catRect.x += moveX * catSpeed * deltaTime;
-    for (auto& item : currentRoom.furniture) {
-        if (SDL_HasRectIntersectionFloat(&catRect, &item.rect)) {
-            if (item.type == FurnitureType::Static) {
-                if (moveX > 0) catRect.x = item.rect.x - catRect.w;
-                else if (moveX < 0) catRect.x = item.rect.x + item.rect.w;
-            } else {
-                item.rect.x += moveX * (catSpeed * 0.4f) * deltaTime;
-            }
-        }
-    }
-
-    catRect.y += moveY * catSpeed * deltaTime;
-    for (auto& item : currentRoom.furniture) {
-        if (SDL_HasRectIntersectionFloat(&catRect, &item.rect)) {
-            if (item.type == FurnitureType::Static) {
-                if (moveY > 0) catRect.y = item.rect.y - catRect.h;
-                else if (moveY < 0) catRect.y = item.rect.y + item.rect.h;
-            } else {
-                item.rect.y += moveY * (catSpeed * 0.4f) * deltaTime;
-            }
-        }
-    }
-
-    // Door Transitions
-    for (const auto& door : currentRoom.doors) {
-        if (SDL_HasRectIntersectionFloat(&catRect, &door.rect)) {
-            moveLeftPressed = moveRightPressed = moveUpPressed = moveDownPressed = false;
-            SwitchRoom(door.targetRoom, currentRoomID);
-            break;
-        }
-    }
-
-    // Update Systems
-    UpdateHuman(deltaTime);
-    UpdateMice(deltaTime);
-
-    // --- Cat Touches Human Check (-50% Irritation Reduction) ---
-    if (currentRoom.humanPresent && human.touchCooldown <= 0.0f) {
-        if (SDL_HasRectIntersectionFloat(&catRect, &human.rect)) {
-            if (human.irritation > 0.0f) {
-                human.irritation -= 50.0f;
-                if (human.irritation < 0.0f) human.irritation = 0.0f;
-                std::cout << "*CAT RUBBED HUMAN! Anger decreased by 50%! Current: " 
-                          << human.irritation << "%*" << std::endl;
-            }
-            human.touchCooldown = 1.5f; // 1.5s cooldown before cat can calm them again
-        }
-    }
-
-    if (roundBannerTimer > 0.0f) {
-        roundBannerTimer -= deltaTime;
     }
 }
 
@@ -532,7 +732,7 @@ int Gameplay::GetTotalHouseMiceCount() const {
 
 void Gameplay::RenderHuman(SDL_Renderer* renderer) {
     if (house[currentRoomID].humanPresent) {
-        SDL_SetRenderDrawColor(renderer, 70, 130, 180, 255); // Blue/Grey Human figure
+        SDL_SetRenderDrawColor(renderer, 70, 130, 180, 255);
         SDL_RenderFillRect(renderer, &human.rect);
     }
 }
@@ -550,110 +750,4 @@ void Gameplay::RenderMice(SDL_Renderer* renderer) {
         }
         SDL_RenderFillRect(renderer, &mouse.rect);
     }
-}
-
-void Gameplay::RenderHUD(SDL_Renderer* renderer, TTF_Font* fontUI) {
-    int windowWidth = 0, windowHeight = 0;
-    SDL_GetRenderOutputSize(renderer, &windowWidth, &windowHeight);
-
-    // 1. Top HUD Bar Background
-    SDL_FRect hudBar{ 0.0f, 0.0f, (float)windowWidth, 50.0f };
-    SDL_SetRenderDrawColor(renderer, 20, 25, 30, 230);
-    SDL_RenderFillRect(renderer, &hudBar);
-
-    if (!fontUI) return;
-
-    SDL_Color white = { 255, 255, 255, 255 };
-    SDL_Color cyan  = { 80, 210, 240, 255 };
-    SDL_Color yellow = { 240, 200, 40, 255 };
-    SDL_Color red   = { 240, 60, 60, 255 };
-
-    if (isGameOver) {
-        Helpers::RenderCenteredText(renderer, fontUI, "GAME OVER! TAKEN TO THE POUND!", 
-                                   (float)windowWidth / 2.0f, 25.0f, red);
-        return;
-    }
-
-    const RoomState& activeRoom = house[currentRoomID];
-
-    // 2. Render Text Stats
-    std::string roomText = "Room: " + activeRoom.name;
-    std::string miceText = "Mice: " + std::to_string(activeRoom.mice.size()) + 
-                           " (Total: " + std::to_string(GetTotalHouseMiceCount()) + ")";
-    std::string livesText = "Chances: " + std::to_string(chancesRemaining);
-
-    Helpers::RenderCenteredText(renderer, fontUI, roomText.c_str(), 120.0f, 25.0f, cyan);
-    Helpers::RenderCenteredText(renderer, fontUI, miceText.c_str(), (float)windowWidth * 0.38f, 25.0f, white);
-    Helpers::RenderCenteredText(renderer, fontUI, livesText.c_str(), (float)windowWidth - 80.0f, 25.0f, white);
-
-    // 3. Render Human Irritation Progress Bar
-    float barWidth = 150.0f;
-    float barHeight = 18.0f;
-    float barX = (float)windowWidth * 0.65f - (barWidth / 2.0f);
-    float barY = 16.0f;
-
-    // Label
-    Helpers::RenderCenteredText(renderer, fontUI, "Anger:", barX - 40.0f, 25.0f, white);
-
-    // Progress Bar Background Plate (Dark Red/Grey)
-    SDL_FRect bgBarRect{ barX, barY, barWidth, barHeight };
-    SDL_SetRenderDrawColor(renderer, 50, 20, 20, 255);
-    SDL_RenderFillRect(renderer, &bgBarRect);
-
-    // Progress Fill (Transitions from Yellow to Bright Red as anger rises)
-    float fillWidth = (human.irritation / 100.0f) * barWidth;
-    SDL_FRect fillBarRect{ barX, barY, fillWidth, barHeight };
-
-    if (human.irritation >= 70.0f) {
-        SDL_SetRenderDrawColor(renderer, 240, 60, 60, 255);  // Red
-    } else {
-        SDL_SetRenderDrawColor(renderer, 240, 180, 40, 255); // Amber/Yellow
-    }
-    SDL_RenderFillRect(renderer, &fillBarRect);
-
-    // White Border around Progress Bar
-    SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
-    SDL_RenderRect(renderer, &bgBarRect);
-
-    // Draw Round Banner Overlay
-    if (roundBannerTimer > 0.0f) {
-        std::string roundText = "ROUND " + std::to_string(roundNumber) + " START!";
-        Helpers::RenderCenteredText(renderer, fontUI, roundText.c_str(), 
-                                   (float)windowWidth / 2.0f, (float)windowHeight / 2.0f, yellow);
-    }
-}
-
-void Gameplay::Render(SDL_Renderer* renderer, TTF_Font* fontUI) {
-    const RoomState& currentRoom = house[currentRoomID];
-
-    // 1. Render Doors
-    SDL_SetRenderDrawColor(renderer, 120, 70, 30, 255);
-    for (const auto& door : currentRoom.doors) {
-        SDL_RenderFillRect(renderer, &door.rect);
-    }
-
-    // 2. Render Furniture
-    for (const auto& item : currentRoom.furniture) {
-        if (item.type == FurnitureType::Static) {
-            SDL_SetRenderDrawColor(renderer, 100, 110, 120, 255);
-        } else if (item.type == FurnitureType::Moveable) {
-            SDL_SetRenderDrawColor(renderer, 160, 100, 60, 255);
-        } else {
-            SDL_SetRenderDrawColor(renderer, 180, 140, 80, 255);
-        }
-        SDL_RenderFillRect(renderer, &item.rect);
-    }
-
-    // 3. Render Human (Blue Figure)
-    RenderHuman(renderer);
-
-    // 4. Render Mice Entities
-    RenderMice(renderer);
-
-    // 5. Render Cat
-    SDL_SetRenderDrawColor(renderer, 240, 130, 40, 255);
-    SDL_RenderFillRect(renderer, &catRect);
-
-    // 6. Render HUD
-    RenderHUD(renderer, fontUI);
 }

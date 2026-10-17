@@ -9,7 +9,7 @@ enum class RoomID {
     GuestBedroom,
     Kitchen,
     Hallway,
-    Outside // Backyard/Front porch when thrown out
+    Outside
 };
 
 enum class MouseState {
@@ -50,27 +50,41 @@ struct Mouse {
     float dirX = 0.0f;
     float dirY = 0.0f;
     float changeDirTimer = 0.0f;
-    float squeakTimer = 2.0f; // Countdown to squeaking
+    float squeakTimer = 5.0f;
     float stunTimer = 0.0f;
     float speed = 120.0f;
 };
 
 struct Human {
     SDL_FRect rect{ 600.0f, 250.0f, 45.0f, 75.0f };
-    float moveTimer = 14.0f;       // Time before deciding to leave room
-    float irritation = 0.0f;       // 0% to 100%
-    float touchCooldown = 0.0f;    // Cooldown for collision checks
-    float decayDelayTimer = 0.0f;  // Delay before anger decays
+    float moveTimer = 14.0f;
+    float irritation = 0.0f;
+    float touchCooldown = 0.0f;
+    float decayDelayTimer = 0.0f;
 
-    // Wandering Movement within room
     float targetX = 600.0f;
     float targetY = 250.0f;
-    float wanderSpeed = 60.0f;     // Slow walk speed
-    float pauseTimer = 0.0f;       // Brief pause between wandering points
+    float wanderSpeed = 60.0f;
+    float pauseTimer = 0.0f;
 
-    // Door Exiting State
     bool isHeadingToDoor = false;
     RoomID nextRoomID = RoomID::LivingRoom;
+};
+
+struct Item {
+    SDL_FRect rect{ 0.0f, 0.0f, 22.0f, 22.0f };
+    ItemType type = ItemType::None;
+    int ammo = 3;
+    bool spawned = true;
+};
+
+struct Projectile {
+    SDL_FRect rect{ 0.0f, 0.0f, 8.0f, 8.0f };
+    float dirX = 0.0f;
+    float dirY = 0.0f;
+    float speed = 500.0f;
+    float lifetime = 2.0f; // Seconds before despawning
+    ItemType type = ItemType::Slingshot;
 };
 
 struct RoomState {
@@ -79,6 +93,7 @@ struct RoomState {
     std::vector<Furniture> furniture;
     std::vector<Door> doors;
     std::vector<Mouse> mice;
+    std::vector<Item> items;
     bool humanPresent = false;
     int miceCount = 0;
 };
