@@ -19,6 +19,9 @@ public:
     void Render(SDL_Renderer* renderer, TTF_Font* fontUI);
 
 private:
+    int score = 0;
+    int highScore = 0;
+    
     float windowWidth = 1280.0f;
     float windowHeight = 720.0f;
     bool isHouseInitialized = false;
@@ -58,6 +61,7 @@ private:
 
     // Helper Methods
     SDL_FRect GetRoomBounds(RoomID roomID, float windowWidth, float windowHeight) const;
+    void AddScore(int points);
     void UpdateMice(float deltaTime);
     void UpdateHuman(float deltaTime);
     void UpdateProjectiles(float deltaTime);

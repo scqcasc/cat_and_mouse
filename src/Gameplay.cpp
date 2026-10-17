@@ -341,39 +341,44 @@ void Gameplay::RenderProjectiles(SDL_Renderer* renderer) {
 }
 
 void Gameplay::RenderHUD(SDL_Renderer* renderer, TTF_Font* fontUI) {
-    int windowWidth = 0, windowHeight = 0;
-    SDL_GetRenderOutputSize(renderer, &windowWidth, &windowHeight);
+    int w = 0, h = 0;
+    SDL_GetRenderOutputSize(renderer, &w, &h);
+    float winWidth = (float)w;
 
-    SDL_FRect hudBar{ 0.0f, 0.0f, (float)windowWidth, 50.0f };
+    // Top HUD Bar Background
+    SDL_FRect hudBar{ 0.0f, 0.0f, winWidth, 50.0f };
     SDL_SetRenderDrawColor(renderer, 20, 25, 30, 230);
     SDL_RenderFillRect(renderer, &hudBar);
 
     SDL_Color white  = { 255, 255, 255, 255 };
     SDL_Color cyan   = { 80, 210, 240, 255 };
     SDL_Color yellow = { 240, 200, 40, 255 };
+    SDL_Color green  = { 80, 220, 100, 255 };
     SDL_Color red    = { 240, 60, 60, 255 };
 
     if (roundBannerTimer > 0.0f && fontUI) {
         std::string roundText = "ROUND " + std::to_string(roundNumber) + " START!";
         Helpers::RenderCenteredText(renderer, fontUI, roundText.c_str(), 
-                                   (float)windowWidth / 2.0f, (float)windowHeight / 2.0f, yellow);
+                                   winWidth / 2.0f, (float)h / 2.0f, yellow);
     }
 
     if (!fontUI) return;
 
     if (isGameOver) {
-        Helpers::RenderCenteredText(renderer, fontUI, "GAME OVER! TAKEN TO THE POUND!", 
-                                   (float)windowWidth / 2.0f, 25.0f, red);
+        std::string gameOverText = "GAME OVER! TAKEN TO THE POUND! FINAL SCORE: " + std::to_string(score);
+        Helpers::RenderCenteredText(renderer, fontUI, gameOverText.c_str(), 
+                                   winWidth / 2.0f, 25.0f, red);
         return;
     }
 
     const RoomState& activeRoom = house[currentRoomID];
 
-    // Stats Text
+    // Format Arcade HUD strings
+    std::string scoreText = "SCORE: " + std::to_string(score);
+    std::string hiScoreText = "HI: " + std::to_string(highScore);
     std::string roomText = "Room: " + activeRoom.name;
     std::string miceText = "Mice: " + std::to_string(activeRoom.mice.size()) + 
-                           " (Total: " + std::to_string(GetTotalHouseMiceCount()) + ")";
-    std::string livesText = "Chances: " + std::to_string(chancesRemaining);
+                           " (" + std::to_string(GetTotalHouseMiceCount()) + ")";
 
     std::string itemText = "Item: ";
     if (equippedItem == ItemType::Slingshot) itemText += "Slingshot (" + std::to_string(itemAmmo) + ")";
@@ -381,15 +386,20 @@ void Gameplay::RenderHUD(SDL_Renderer* renderer, TTF_Font* fontUI) {
     else if (equippedItem == ItemType::ToyRobot) itemText += "Robot (" + std::to_string(itemAmmo) + ")";
     else itemText += "None";
 
-    Helpers::RenderCenteredText(renderer, fontUI, roomText.c_str(), 100.0f, 25.0f, cyan);
-    Helpers::RenderCenteredText(renderer, fontUI, miceText.c_str(), (float)windowWidth * 0.32f, 25.0f, white);
-    Helpers::RenderCenteredText(renderer, fontUI, itemText.c_str(), (float)windowWidth * 0.52f, 25.0f, yellow);
+    std::string livesText = "Chances: " + std::to_string(chancesRemaining);
 
-    // Human Anger Progress Bar
-    float barWidth = 120.0f;
-    float barHeight = 18.0f;
-    float barX = (float)windowWidth * 0.76f - (barWidth / 2.0f);
-    float barY = 16.0f;
+    // Render Stats horizontally across HUD bar
+    Helpers::RenderCenteredText(renderer, fontUI, scoreText.c_str(), winWidth * 0.08f, 25.0f, green);
+    Helpers::RenderCenteredText(renderer, fontUI, hiScoreText.c_str(), winWidth * 0.18f, 25.0f, yellow);
+    Helpers::RenderCenteredText(renderer, fontUI, roomText.c_str(), winWidth * 0.32f, 25.0f, cyan);
+    Helpers::RenderCenteredText(renderer, fontUI, miceText.c_str(), winWidth * 0.48f, 25.0f, white);
+    Helpers::RenderCenteredText(renderer, fontUI, itemText.c_str(), winWidth * 0.64f, 25.0f, yellow);
+
+    // Human Anger Meter
+    float barWidth = 100.0f;
+    float barHeight = 16.0f;
+    float barX = winWidth * 0.82f - (barWidth / 2.0f);
+    float barY = 17.0f;
 
     Helpers::RenderCenteredText(renderer, fontUI, "Anger:", barX - 35.0f, 25.0f, white);
 
@@ -410,7 +420,8 @@ void Gameplay::RenderHUD(SDL_Renderer* renderer, TTF_Font* fontUI) {
     SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
     SDL_RenderRect(renderer, &bgBarRect);
 
-    Helpers::RenderCenteredText(renderer, fontUI, livesText.c_str(), (float)windowWidth - 70.0f, 25.0f, white);
+    // Remaining Lives
+    Helpers::RenderCenteredText(renderer, fontUI, livesText.c_str(), winWidth - 60.0f, 25.0f, white);
 }
 
 void Gameplay::Render(SDL_Renderer* renderer, TTF_Font* fontUI) {
@@ -549,25 +560,40 @@ void Gameplay::IncreaseHumanIrritation(float amount) {
     }
 }
 
+void Gameplay::AddScore(int points) {
+    score += points;
+    if (score > highScore) {
+        highScore = score;
+    }
+}
+
 void Gameplay::AdvanceToNextRound() {
+    // Award round completion bonus
+    AddScore(500 * roundNumber);
+
     roundNumber++;
     roundBannerTimer = 3.0f;
-    std::cout << "ROUND COMPLETED! Starting Round " << roundNumber << std::endl;
+    std::cout << "ROUND COMPLETED! Starting Round " << roundNumber << " | Current Score: " << score << std::endl;
 
     human.irritation = 0.0f;
 
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<int> miceChance(1 + (roundNumber / 2), 3 + (roundNumber / 2));
-    std::uniform_real_distribution<float> posX(200.0f, 800.0f);
-    std::uniform_real_distribution<float> posY(200.0f, 500.0f);
+    std::uniform_int_distribution<int> itemTypeDist(1, 3);
 
     for (auto& pair : house) {
         RoomState& room = pair.second;
         room.mice.clear();
+        room.items.clear();
 
-        int count = miceChance(gen);
-        for (int i = 0; i < count; ++i) {
+        SDL_FRect roomBounds = GetRoomBounds(room.id, windowWidth, windowHeight);
+
+        int mouseCount = miceChance(gen);
+        std::uniform_real_distribution<float> posX(roomBounds.x + 40.0f, roomBounds.x + roomBounds.w - 60.0f);
+        std::uniform_real_distribution<float> posY(roomBounds.y + 40.0f, roomBounds.y + roomBounds.h - 60.0f);
+
+        for (int i = 0; i < mouseCount; ++i) {
             Mouse m;
             m.rect.x = posX(gen);
             m.rect.y = posY(gen);
@@ -575,6 +601,20 @@ void Gameplay::AdvanceToNextRound() {
             room.mice.push_back(m);
         }
         room.miceCount = (int)room.mice.size();
+
+        int itemCount = 1 + (roundNumber / 2);
+        for (int i = 0; i < itemCount; ++i) {
+            Item newItem;
+            newItem.rect.x = posX(gen);
+            newItem.rect.y = posY(gen);
+            newItem.rect.w = 22.0f;
+            newItem.rect.h = 22.0f;
+            newItem.type = static_cast<ItemType>(itemTypeDist(gen));
+            newItem.ammo = 3 + roundNumber;
+            newItem.spawned = true;
+
+            room.items.push_back(newItem);
+        }
     }
 }
 
@@ -791,6 +831,12 @@ void Gameplay::UpdateMice(float deltaTime) {
 
     for (int i = (int)caughtMiceIndices.size() - 1; i >= 0; --i) {
         size_t index = caughtMiceIndices[i];
+        // Bonus points for taking down an armed mouse
+        if (currentRoom.mice[index].equippedItem != ItemType::None) {
+            AddScore(250);
+        } else {
+            AddScore(100);
+        }
         currentRoom.mice.erase(currentRoom.mice.begin() + index);
         miceKilled++;
         currentRoom.miceCount = (int)currentRoom.mice.size();
