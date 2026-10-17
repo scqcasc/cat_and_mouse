@@ -53,6 +53,11 @@ struct Mouse {
     float squeakTimer = 5.0f;
     float stunTimer = 0.0f;
     float speed = 120.0f;
+
+    // Armed Mouse Attributes
+    ItemType equippedItem = ItemType::None;
+    int ammo = 0;
+    float shootCooldown = 0.0f;
 };
 
 struct Human {
@@ -83,8 +88,9 @@ struct Projectile {
     float dirX = 0.0f;
     float dirY = 0.0f;
     float speed = 500.0f;
-    float lifetime = 2.0f; // Seconds before despawning
+    float lifetime = 2.0f;
     ItemType type = ItemType::Slingshot;
+    bool isFiredByMouse = false; // Distinguishes friendly vs hostile projectiles
 };
 
 struct RoomState {

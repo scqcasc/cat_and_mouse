@@ -12,13 +12,17 @@ public:
     Gameplay();
     ~Gameplay();
 
-    void InitializeHouse();
+    void InitializeHouse(float windowWidth = 1280.0f, float windowHeight = 720.0f);
     void SwitchRoom(RoomID nextRoom, RoomID previousRoom);
     void HandleInput(const SDL_Event& event, GameState& currentState, const ControlsMenu& controls);
     void Update(float deltaTime, const ControlsMenu& controls);
     void Render(SDL_Renderer* renderer, TTF_Font* fontUI);
 
 private:
+    float windowWidth = 1280.0f;
+    float windowHeight = 720.0f;
+    bool isHouseInitialized = false;
+
     RoomID currentRoomID;
     std::map<RoomID, RoomState> house;
 
@@ -53,6 +57,7 @@ private:
     bool moveDownPressed = false;
 
     // Helper Methods
+    SDL_FRect GetRoomBounds(RoomID roomID, float windowWidth, float windowHeight) const;
     void UpdateMice(float deltaTime);
     void UpdateHuman(float deltaTime);
     void UpdateProjectiles(float deltaTime);

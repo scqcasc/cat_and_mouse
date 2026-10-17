@@ -11,17 +11,26 @@ Gameplay::Gameplay() {
 
 Gameplay::~Gameplay() {}
 
-void Gameplay::InitializeHouse() {
+
+void Gameplay::InitializeHouse(float windowWidth, float windowHeight) {
     house.clear();
+
+    // Fallback safety if 0 or uninitialized dimensions are passed
+    if (windowWidth <= 0.0f) windowWidth = 1280.0f;
+    if (windowHeight <= 0.0f) windowHeight = 720.0f;
 
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<int> miceChance(1, 3);
-    std::uniform_real_distribution<float> posX(200.0f, 800.0f);
-    std::uniform_real_distribution<float> posY(200.0f, 500.0f);
 
-    auto PopulateMice = [&](int count) {
+    // Compute exact room bounds based on live window size
+    SDL_FRect roomBounds = GetRoomBounds(RoomID::LivingRoom, windowWidth, windowHeight);
+    SDL_FRect hallwayBounds = GetRoomBounds(RoomID::Hallway, windowWidth, windowHeight);
+
+    auto PopulateMice = [&](int count, const SDL_FRect& bounds) {
         std::vector<Mouse> miceList;
+        std::uniform_real_distribution<float> posX(bounds.x + 40.0f, bounds.x + bounds.w - 60.0f);
+        std::uniform_real_distribution<float> posY(bounds.y + 40.0f, bounds.y + bounds.h - 60.0f);
         for (int i = 0; i < count; ++i) {
             Mouse m;
             m.rect.x = posX(gen);
@@ -31,74 +40,70 @@ void Gameplay::InitializeHouse() {
         return miceList;
     };
 
-    // 1. Living Room (Contains Slingshot)
+    // 1. Living Room
     RoomState livingRoom;
     livingRoom.id = RoomID::LivingRoom;
     livingRoom.name = "Living Room";
     livingRoom.humanPresent = true;
-    livingRoom.mice = PopulateMice(miceChance(gen));
-    livingRoom.miceCount = (int)livingRoom.mice.size();
-    livingRoom.items = { { { 700.0f, 350.0f, 22.0f, 22.0f }, ItemType::Slingshot, 5, true } };
+    livingRoom.mice = PopulateMice(miceChance(gen), roomBounds);
+    livingRoom.items = { { { roomBounds.x + roomBounds.w - 80.0f, roomBounds.y + 80.0f, 22.0f, 22.0f }, ItemType::Slingshot, 5, true } };
     livingRoom.furniture = {
-        { "Couch",        { 300, 200, 160, 80 },  FurnitureType::Moveable },
-        { "Coffee Table", { 340, 320, 80,  40 },  FurnitureType::Flippable },
-        { "Bookcase",     { 100, 180, 40,  120 }, FurnitureType::Flippable },
-        { "TV",           { 550, 120, 100, 40 },  FurnitureType::Moveable }
+        { "Couch",        { roomBounds.x + 100.0f, roomBounds.y + 80.0f,  140.0f, 70.0f }, FurnitureType::Moveable },
+        { "Coffee Table", { roomBounds.x + 140.0f, roomBounds.y + 180.0f, 80.0f,  40.0f }, FurnitureType::Flippable },
+        { "Bookcase",     { roomBounds.x + 20.0f,  roomBounds.y + 100.0f, 40.0f, 100.0f }, FurnitureType::Flippable },
+        { "TV",           { roomBounds.x + 280.0f, roomBounds.y + 20.0f,  100.0f, 35.0f }, FurnitureType::Moveable }
     };
     livingRoom.doors = {
-        { { 1200, 300, 20, 100 }, RoomID::Hallway, "To Hallway" },
-        { { 500, 650, 100, 20 },  RoomID::Kitchen, "To Kitchen" }
+        { { roomBounds.x + roomBounds.w - 20.0f, roomBounds.y + (roomBounds.h / 2.0f) - 40.0f, 20.0f, 80.0f }, RoomID::Hallway, "To Hallway" },
+        { { roomBounds.x + (roomBounds.w / 2.0f) - 40.0f, roomBounds.y + roomBounds.h - 20.0f, 80.0f, 20.0f },  RoomID::Kitchen, "To Kitchen" }
     };
     house[RoomID::LivingRoom] = livingRoom;
 
-    // 2. Kitchen (Contains Toy Robot)
+    // 2. Kitchen
     RoomState kitchen;
     kitchen.id = RoomID::Kitchen;
     kitchen.name = "Kitchen";
-    kitchen.mice = PopulateMice(miceChance(gen));
-    kitchen.miceCount = (int)kitchen.mice.size();
-    kitchen.items = { { { 300.0f, 450.0f, 22.0f, 22.0f }, ItemType::ToyRobot, 2, true } };
+    kitchen.mice = PopulateMice(miceChance(gen), roomBounds);
+    kitchen.items = { { { roomBounds.x + 80.0f, roomBounds.y + roomBounds.h - 80.0f, 22.0f, 22.0f }, ItemType::ToyRobot, 2, true } };
     kitchen.furniture = {
-        { "Stove",        { 100, 120, 80, 80 },   FurnitureType::Static },
-        { "Refrigerator", { 200, 120, 80, 90 },   FurnitureType::Static },
-        { "Dining Table", { 400, 300, 140, 90 },  FurnitureType::Flippable }
+        { "Stove",        { roomBounds.x + 30.0f,  roomBounds.y + 30.0f,  70.0f, 70.0f }, FurnitureType::Static },
+        { "Refrigerator", { roomBounds.x + 120.0f, roomBounds.y + 30.0f,  70.0f, 80.0f }, FurnitureType::Static },
+        { "Dining Table", { roomBounds.x + 260.0f, roomBounds.y + 180.0f, 120.0f, 80.0f }, FurnitureType::Flippable }
     };
     kitchen.doors = {
-        { { 500, 70, 100, 20 }, RoomID::LivingRoom, "To Living Room" }
+        { { roomBounds.x + (roomBounds.w / 2.0f) - 40.0f, roomBounds.y, 80.0f, 20.0f }, RoomID::LivingRoom, "To Living Room" }
     };
     house[RoomID::Kitchen] = kitchen;
 
-    // 3. Hallway
+    // 3. Hallway (Narrow Viewport)
     RoomState hallway;
     hallway.id = RoomID::Hallway;
     hallway.name = "Hallway";
-    hallway.mice = PopulateMice(miceChance(gen));
-    hallway.miceCount = (int)hallway.mice.size();
+    hallway.mice = PopulateMice(miceChance(gen), hallwayBounds);
     hallway.furniture = {
-        { "Lamp",       { 300, 200, 40, 40 }, FurnitureType::Moveable },
-        { "Night Stand",{ 500, 200, 50, 50 }, FurnitureType::Moveable }
+        { "Lamp",       { hallwayBounds.x + 180.0f, hallwayBounds.y + 40.0f, 35.0f, 35.0f }, FurnitureType::Moveable },
+        { "Night Stand",{ hallwayBounds.x + 420.0f, hallwayBounds.y + 40.0f, 45.0f, 45.0f }, FurnitureType::Moveable }
     };
     hallway.doors = {
-        { { 60, 300, 20, 100 },   RoomID::LivingRoom,    "To Living Room" },
-        { { 400, 70, 100, 20 },   RoomID::MasterBedroom, "To Master Bed" },
-        { { 800, 70, 100, 20 },   RoomID::GuestBedroom,  "To Guest Bed" }
+        { { hallwayBounds.x, hallwayBounds.y + (hallwayBounds.h / 2.0f) - 40.0f, 20.0f, 80.0f }, RoomID::LivingRoom, "To Living Room" },
+        { { hallwayBounds.x + 180.0f, hallwayBounds.y, 80.0f, 20.0f }, RoomID::MasterBedroom, "To Master Bed" },
+        { { hallwayBounds.x + 500.0f, hallwayBounds.y, 80.0f, 20.0f }, RoomID::GuestBedroom,  "To Guest Bed" }
     };
     house[RoomID::Hallway] = hallway;
 
-    // 4. Master Bedroom (Contains Laser Blaster)
+    // 4. Master Bedroom
     RoomState masterBed;
     masterBed.id = RoomID::MasterBedroom;
     masterBed.name = "Master Bedroom";
-    masterBed.mice = PopulateMice(miceChance(gen));
-    masterBed.miceCount = (int)masterBed.mice.size();
-    masterBed.items = { { { 600.0f, 220.0f, 22.0f, 22.0f }, ItemType::LaserBlaster, 3, true } };
+    masterBed.mice = PopulateMice(miceChance(gen), roomBounds);
+    masterBed.items = { { { roomBounds.x + 380.0f, roomBounds.y + 100.0f, 22.0f, 22.0f }, ItemType::LaserBlaster, 3, true } };
     masterBed.furniture = {
-        { "Bed",         { 200, 180, 140, 180 }, FurnitureType::Static },
-        { "Night Stand", { 140, 180, 50, 50 },   FurnitureType::Moveable },
-        { "Cabinet",     { 500, 180, 80, 120 },  FurnitureType::Moveable }
+        { "Bed",         { roomBounds.x + 100.0f, roomBounds.y + 80.0f, 120.0f, 150.0f }, FurnitureType::Static },
+        { "Night Stand", { roomBounds.x + 40.0f,  roomBounds.y + 80.0f, 45.0f, 45.0f },   FurnitureType::Moveable },
+        { "Cabinet",     { roomBounds.x + 350.0f, roomBounds.y + 80.0f, 70.0f, 100.0f },  FurnitureType::Moveable }
     };
     masterBed.doors = {
-        { { 400, 650, 100, 20 }, RoomID::Hallway, "To Hallway" }
+        { { roomBounds.x + (roomBounds.w / 2.0f) - 40.0f, roomBounds.y + roomBounds.h - 20.0f, 80.0f, 20.0f }, RoomID::Hallway, "To Hallway" }
     };
     house[RoomID::MasterBedroom] = masterBed;
 
@@ -106,16 +111,19 @@ void Gameplay::InitializeHouse() {
     RoomState guestBed;
     guestBed.id = RoomID::GuestBedroom;
     guestBed.name = "Guest Bedroom";
-    guestBed.mice = PopulateMice(miceChance(gen));
-    guestBed.miceCount = (int)guestBed.mice.size();
+    guestBed.mice = PopulateMice(miceChance(gen), roomBounds);
     guestBed.furniture = {
-        { "Bed",             { 300, 180, 140, 180 }, FurnitureType::Static },
-        { "Chest of Drawers",{ 550, 180, 70, 110 },  FurnitureType::Moveable }
+        { "Bed",             { roomBounds.x + 180.0f, roomBounds.y + 80.0f, 120.0f, 150.0f }, FurnitureType::Static },
+        { "Chest of Drawers",{ roomBounds.x + 380.0f, roomBounds.y + 80.0f, 60.0f, 90.0f },   FurnitureType::Moveable }
     };
     guestBed.doors = {
-        { { 800, 650, 100, 20 }, RoomID::Hallway, "To Hallway" }
+        { { roomBounds.x + (roomBounds.w / 2.0f) - 40.0f, roomBounds.y + roomBounds.h - 20.0f, 80.0f, 20.0f }, RoomID::Hallway, "To Hallway" }
     };
     house[RoomID::GuestBedroom] = guestBed;
+
+    // Place Cat inside initial Living Room bounds
+    catRect.x = roomBounds.x + 100.0f;
+    catRect.y = roomBounds.y + 200.0f;
 }
 
 void Gameplay::UseEquippedItem() {
@@ -144,42 +152,6 @@ void Gameplay::UseEquippedItem() {
     }
 }
 
-void Gameplay::UpdateProjectiles(float deltaTime) {
-    RoomState& currentRoom = house[currentRoomID];
-    std::vector<size_t> expiredProjectiles;
-
-    for (size_t i = 0; i < activeProjectiles.size(); ++i) {
-        Projectile& p = activeProjectiles[i];
-        p.lifetime -= deltaTime;
-
-        p.rect.x += p.dirX * p.speed * deltaTime;
-        p.rect.y += p.dirY * p.speed * deltaTime;
-
-        if (p.lifetime <= 0.0f) {
-            expiredProjectiles.push_back(i);
-            continue;
-        }
-
-        // Check collision with mice
-        for (auto& mouse : currentRoom.mice) {
-            if (SDL_HasRectIntersectionFloat(&p.rect, &mouse.rect)) {
-                mouse.state = MouseState::Stunned;
-                mouse.stunTimer = 4.0f; // Stun mouse for 4 seconds
-                std::cout << "MOUSE STUNNED BY PROJECTILE!" << std::endl;
-                expiredProjectiles.push_back(i);
-                break;
-            }
-        }
-    }
-
-    // Erase expired/hit projectiles backwards
-    for (int i = (int)expiredProjectiles.size() - 1; i >= 0; --i) {
-        size_t index = expiredProjectiles[i];
-        if (index < activeProjectiles.size()) {
-            activeProjectiles.erase(activeProjectiles.begin() + index);
-        }
-    }
-}
 
 void Gameplay::HandleInput(const SDL_Event& event, GameState& currentState, const ControlsMenu& controls) {
     if (event.type == SDL_EVENT_KEY_DOWN) {
@@ -209,7 +181,7 @@ void Gameplay::HandleInput(const SDL_Event& event, GameState& currentState, cons
 }
 
 void Gameplay::Update(float deltaTime, const ControlsMenu& controls) {
-    if (isGameOver) return;
+    if (isGameOver || !isHouseInitialized) return;
 
     if (roundBannerTimer > 0.0f) {
         roundBannerTimer -= deltaTime;
@@ -222,89 +194,117 @@ void Gameplay::Update(float deltaTime, const ControlsMenu& controls) {
         }
     }
 
-    if (stunTimer > 0.0f) {
-        stunTimer -= deltaTime;
-        return;
-    }
-
-    float moveX = 0.0f;
-    float moveY = 0.0f;
-
-    if (moveLeftPressed)  moveX -= 1.0f;
-    if (moveRightPressed) moveX += 1.0f;
-    if (moveUpPressed)    moveY -= 1.0f;
-    if (moveDownPressed)  moveY += 1.0f;
-
-    if (moveX != 0.0f || moveY != 0.0f) {
-        lastFacingX = moveX;
-        lastFacingY = moveY;
-    }
-
-    if (moveX != 0.0f && moveY != 0.0f) {
-        moveX *= 0.7071f;
-        moveY *= 0.7071f;
-    }
-
     RoomState& currentRoom = house[currentRoomID];
+    SDL_FRect bounds = GetRoomBounds(currentRoomID, windowWidth, windowHeight);
 
-    // Cat Movement & Furniture Collision
-    catRect.x += moveX * catSpeed * deltaTime;
-    for (auto& item : currentRoom.furniture) {
-        if (SDL_HasRectIntersectionFloat(&catRect, &item.rect)) {
-            if (item.type == FurnitureType::Static) {
-                if (moveX > 0) catRect.x = item.rect.x - catRect.w;
-                else if (moveX < 0) catRect.x = item.rect.x + item.rect.w;
-            } else {
-                item.rect.x += moveX * (catSpeed * 0.4f) * deltaTime;
+    // --- Only Process Cat Movement & Input if NOT Stunned ---
+    if (stunTimer > 0.0f) {
+        stunTimer -= deltaTime; // Countdown stun clock while game world runs!
+    } else {
+        float moveX = 0.0f;
+        float moveY = 0.0f;
+
+        if (moveLeftPressed)  moveX -= 1.0f;
+        if (moveRightPressed) moveX += 1.0f;
+        if (moveUpPressed)    moveY -= 1.0f;
+        if (moveDownPressed)  moveY += 1.0f;
+
+        if (moveX != 0.0f || moveY != 0.0f) {
+            lastFacingX = moveX;
+            lastFacingY = moveY;
+        }
+
+        if (moveX != 0.0f && moveY != 0.0f) {
+            moveX *= 0.7071f;
+            moveY *= 0.7071f;
+        }
+
+        // 1. Cat Movement & Furniture Collision with Wall Clamping
+        catRect.x += moveX * catSpeed * deltaTime;
+        for (auto& item : currentRoom.furniture) {
+            if (SDL_HasRectIntersectionFloat(&catRect, &item.rect)) {
+                if (item.type == FurnitureType::Static) {
+                    if (moveX > 0) catRect.x = item.rect.x - catRect.w;
+                    else if (moveX < 0) catRect.x = item.rect.x + item.rect.w;
+                } else {
+                    item.rect.x += moveX * (catSpeed * 0.4f) * deltaTime;
+                    if (item.rect.x < bounds.x) {
+                        item.rect.x = bounds.x;
+                        catRect.x = item.rect.x + item.rect.w;
+                    }
+                    else if (item.rect.x + item.rect.w > bounds.x + bounds.w) {
+                        item.rect.x = bounds.x + bounds.w - item.rect.w;
+                        catRect.x = item.rect.x - catRect.w;
+                    }
+                }
+            }
+        }
+
+        catRect.y += moveY * catSpeed * deltaTime;
+        for (auto& item : currentRoom.furniture) {
+            if (SDL_HasRectIntersectionFloat(&catRect, &item.rect)) {
+                if (item.type == FurnitureType::Static) {
+                    if (moveY > 0) catRect.y = item.rect.y - catRect.h;
+                    else if (moveY < 0) catRect.y = item.rect.y + item.rect.h;
+                } else {
+                    item.rect.y += moveY * (catSpeed * 0.4f) * deltaTime;
+                    if (item.rect.y < bounds.y) {
+                        item.rect.y = bounds.y;
+                        catRect.y = item.rect.y + item.rect.h;
+                    }
+                    else if (item.rect.y + item.rect.h > bounds.y + bounds.h) {
+                        item.rect.y = bounds.y + bounds.h - item.rect.h;
+                        catRect.y = item.rect.y - catRect.h;
+                    }
+                }
+            }
+        }
+
+        // 2. Door Transitions
+        bool isPassingThroughDoor = false;
+        for (const auto& door : currentRoom.doors) {
+            if (SDL_HasRectIntersectionFloat(&catRect, &door.rect)) {
+                isPassingThroughDoor = true;
+                moveLeftPressed = moveRightPressed = moveUpPressed = moveDownPressed = false;
+                SwitchRoom(door.targetRoom, currentRoomID);
+                break;
+            }
+        }
+
+        // 3. Cat Wall Clamping
+        if (!isPassingThroughDoor) {
+            if (catRect.x < bounds.x) catRect.x = bounds.x;
+            if (catRect.x + catRect.w > bounds.x + bounds.w) catRect.x = bounds.x + bounds.w - catRect.w;
+            if (catRect.y < bounds.y) catRect.y = bounds.y;
+            if (catRect.y + catRect.h > bounds.y + bounds.h) catRect.y = bounds.y + bounds.h - catRect.h;
+        }
+
+        // 4. Cat Item Pickups
+        SDL_FRect catPickupBounds{ catRect.x - 5.0f, catRect.y - 5.0f, catRect.w + 10.0f, catRect.h + 10.0f };
+        for (auto& item : currentRoom.items) {
+            if (item.spawned && SDL_HasRectIntersectionFloat(&catPickupBounds, &item.rect)) {
+                item.spawned = false;
+                equippedItem = item.type;
+                itemAmmo = item.ammo;
+                std::cout << "*CAT PICKED UP ITEM! Equipped Ammo: " << itemAmmo << "*" << std::endl;
+            }
+        }
+
+        // 5. Cat Touches Human Check (-50% Anger Soothe)
+        if (currentRoom.humanPresent && human.touchCooldown <= 0.0f) {
+            if (SDL_HasRectIntersectionFloat(&catRect, &human.rect)) {
+                if (human.irritation > 0.0f) {
+                    human.irritation -= 50.0f;
+                    if (human.irritation < 0.0f) human.irritation = 0.0f;
+                    std::cout << "*CAT RUBBED HUMAN! Anger decreased by 50%! Current: " 
+                              << human.irritation << "%*" << std::endl;
+                }
+                human.touchCooldown = 1.5f;
             }
         }
     }
 
-    catRect.y += moveY * catSpeed * deltaTime;
-    for (auto& item : currentRoom.furniture) {
-        if (SDL_HasRectIntersectionFloat(&catRect, &item.rect)) {
-            if (item.type == FurnitureType::Static) {
-                if (moveY > 0) catRect.y = item.rect.y - catRect.h;
-                else if (moveY < 0) catRect.y = item.rect.y + item.rect.h;
-            } else {
-                item.rect.y += moveY * (catSpeed * 0.4f) * deltaTime;
-            }
-        }
-    }
-
-    // Door Transitions
-    for (const auto& door : currentRoom.doors) {
-        if (SDL_HasRectIntersectionFloat(&catRect, &door.rect)) {
-            moveLeftPressed = moveRightPressed = moveUpPressed = moveDownPressed = false;
-            SwitchRoom(door.targetRoom, currentRoomID);
-            break;
-        }
-    }
-
-    // Item Pickups
-    for (auto& item : currentRoom.items) {
-        if (item.spawned && SDL_HasRectIntersectionFloat(&catRect, &item.rect)) {
-            item.spawned = false;
-            equippedItem = item.type;
-            itemAmmo = item.ammo;
-            std::cout << "PICKED UP ITEM! Equipped Ammo: " << itemAmmo << std::endl;
-        }
-    }
-
-    // Cat Touches Human Check (-50% Anger Soothe)
-    if (currentRoom.humanPresent && human.touchCooldown <= 0.0f) {
-        if (SDL_HasRectIntersectionFloat(&catRect, &human.rect)) {
-            if (human.irritation > 0.0f) {
-                human.irritation -= 50.0f;
-                if (human.irritation < 0.0f) human.irritation = 0.0f;
-                std::cout << "*CAT RUBBED HUMAN! Anger decreased by 50%! Current: " 
-                          << human.irritation << "%*" << std::endl;
-            }
-            human.touchCooldown = 1.5f;
-        }
-    }
-
-    // Update Subsystems
+    // --- Subsystems Update Continually (Even when Cat is Stunned) ---
     UpdateHuman(deltaTime);
     UpdateMice(deltaTime);
     UpdateProjectiles(deltaTime);
@@ -329,10 +329,12 @@ void Gameplay::RenderItems(SDL_Renderer* renderer) {
 
 void Gameplay::RenderProjectiles(SDL_Renderer* renderer) {
     for (const auto& p : activeProjectiles) {
-        if (p.type == ItemType::Slingshot) {
-            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255); // White Pellets
+        if (p.isFiredByMouse) {
+            SDL_SetRenderDrawColor(renderer, 255, 200, 0, 255); // Hostile Yellow Shots
+        } else if (p.type == ItemType::Slingshot) {
+            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255); // Friendly White Pellets
         } else if (p.type == ItemType::LaserBlaster) {
-            SDL_SetRenderDrawColor(renderer, 0, 255, 255, 255);   // Cyan Beams
+            SDL_SetRenderDrawColor(renderer, 0, 255, 255, 255);   // Friendly Cyan Beams
         }
         SDL_RenderFillRect(renderer, &p.rect);
     }
@@ -412,15 +414,39 @@ void Gameplay::RenderHUD(SDL_Renderer* renderer, TTF_Font* fontUI) {
 }
 
 void Gameplay::Render(SDL_Renderer* renderer, TTF_Font* fontUI) {
+    int w = 0, h = 0;
+    SDL_GetRenderOutputSize(renderer, &w, &h);
+
+    if (w > 0 && h > 0) {
+        windowWidth = (float)w;
+        windowHeight = (float)h;
+    }
+
+    // Initialize house layout once we know the exact renderer output size
+    if (!isHouseInitialized) {
+        InitializeHouse(windowWidth, windowHeight);
+        isHouseInitialized = true;
+    }
+
+    SDL_FRect bounds = GetRoomBounds(currentRoomID, windowWidth, windowHeight);
+
+    // 1. Draw Outer Border Wall
+    SDL_FRect wallBorder{ bounds.x - 8.0f, bounds.y - 8.0f, bounds.w + 16.0f, bounds.h + 16.0f };
+    SDL_SetRenderDrawColor(renderer, 160, 160, 160, 255);
+    SDL_RenderFillRect(renderer, &wallBorder);
+
+    // 2. Draw Green Carpet Floor
+    SDL_SetRenderDrawColor(renderer, 38, 102, 51, 255);
+    SDL_RenderFillRect(renderer, &bounds);
+
+    // 3. Render Room Contents
     const RoomState& currentRoom = house[currentRoomID];
 
-    // 1. Render Doors
-    SDL_SetRenderDrawColor(renderer, 120, 70, 30, 255);
+    SDL_SetRenderDrawColor(renderer, 140, 80, 30, 255);
     for (const auto& door : currentRoom.doors) {
         SDL_RenderFillRect(renderer, &door.rect);
     }
 
-    // 2. Render Furniture
     for (const auto& item : currentRoom.furniture) {
         if (item.type == FurnitureType::Static) {
             SDL_SetRenderDrawColor(renderer, 100, 110, 120, 255);
@@ -432,23 +458,15 @@ void Gameplay::Render(SDL_Renderer* renderer, TTF_Font* fontUI) {
         SDL_RenderFillRect(renderer, &item.rect);
     }
 
-    // 3. Render Items
     RenderItems(renderer);
-
-    // 4. Render Projectiles
     RenderProjectiles(renderer);
-
-    // 5. Render Human
     RenderHuman(renderer);
-
-    // 6. Render Mice
     RenderMice(renderer);
 
-    // 7. Render Cat
+    // Render Cat
     SDL_SetRenderDrawColor(renderer, 240, 130, 40, 255);
     SDL_RenderFillRect(renderer, &catRect);
 
-    // 8. Render HUD
     RenderHUD(renderer, fontUI);
 }
 
@@ -466,18 +484,35 @@ void Gameplay::TriggerMeow() {
 void Gameplay::SwitchRoom(RoomID nextRoom, RoomID previousRoom) {
     currentRoomID = nextRoom;
 
+    SDL_FRect newBounds = GetRoomBounds(currentRoomID, windowWidth, windowHeight);
+
+    bool doorFound = false;
     for (const auto& door : house[currentRoomID].doors) {
         if (door.targetRoom == previousRoom) {
-            catRect.x = door.rect.x;
-            catRect.y = door.rect.y;
+            doorFound = true;
+            catRect.x = door.rect.x + (door.rect.w / 2.0f) - (catRect.w / 2.0f);
+            catRect.y = door.rect.y + (door.rect.h / 2.0f) - (catRect.h / 2.0f);
 
-            if (door.rect.w > door.rect.h) {
-                catRect.y += (door.rect.y < 200.0f) ? 50.0f : -50.0f;
-            } else {
-                catRect.x += (door.rect.x < 200.0f) ? 50.0f : -50.0f;
+            if (door.rect.w > door.rect.h) { // Top or Bottom door
+                if (door.rect.y <= newBounds.y + 20.0f) {
+                    catRect.y = newBounds.y + 25.0f;
+                } else {
+                    catRect.y = newBounds.y + newBounds.h - catRect.h - 25.0f;
+                }
+            } else { // Left or Right door
+                if (door.rect.x <= newBounds.x + 20.0f) {
+                    catRect.x = newBounds.x + 25.0f;
+                } else {
+                    catRect.x = newBounds.x + newBounds.w - catRect.w - 25.0f;
+                }
             }
             break;
         }
+    }
+
+    if (!doorFound) {
+        catRect.x = newBounds.x + (newBounds.w / 2.0f) - (catRect.w / 2.0f);
+        catRect.y = newBounds.y + (newBounds.h / 2.0f) - (catRect.h / 2.0f);
     }
 }
 
@@ -558,6 +593,7 @@ void Gameplay::UpdateHuman(float deltaTime) {
     }
 
     RoomState& currentRoom = house[humanRoomID];
+    SDL_FRect bounds = GetRoomBounds(humanRoomID, 1280.0f, 720.0f);
 
     // Room Exit Trigger
     if (!human.isHeadingToDoor) {
@@ -616,8 +652,9 @@ void Gameplay::UpdateHuman(float deltaTime) {
                 if (distance < 5.0f) {
                     std::random_device rd;
                     std::mt19937 gen(rd());
-                    std::uniform_real_distribution<float> posX(150.0f, 1050.0f);
-                    std::uniform_real_distribution<float> posY(150.0f, 550.0f);
+                    // Pick wander targets strictly inside active room bounds
+                    std::uniform_real_distribution<float> posX(bounds.x + 40.0f, bounds.x + bounds.w - 60.0f);
+                    std::uniform_real_distribution<float> posY(bounds.y + 40.0f, bounds.y + bounds.h - 80.0f);
                     std::uniform_real_distribution<float> pauseDist(1.0f, 3.0f);
 
                     human.targetX = posX(gen);
@@ -634,6 +671,7 @@ void Gameplay::UpdateHuman(float deltaTime) {
 
 void Gameplay::UpdateMice(float deltaTime) {
     RoomState& currentRoom = house[currentRoomID];
+    SDL_FRect bounds = GetRoomBounds(currentRoomID, windowWidth, windowHeight);
     std::vector<size_t> caughtMiceIndices;
 
     std::random_device rd;
@@ -643,6 +681,20 @@ void Gameplay::UpdateMice(float deltaTime) {
 
     for (size_t i = 0; i < currentRoom.mice.size(); ++i) {
         Mouse& m = currentRoom.mice[i];
+
+        // Item Scavenging Check
+        if (m.state != MouseState::Stunned && m.equippedItem == ItemType::None) {
+            for (auto& item : currentRoom.items) {
+                if (item.spawned && SDL_HasRectIntersectionFloat(&m.rect, &item.rect)) {
+                    item.spawned = false;
+                    m.equippedItem = item.type;
+                    m.ammo = item.ammo;
+                    m.shootCooldown = 1.0f;
+                    std::cout << "*MOUSE PICKED UP AN ITEM! IT'S ARMED!*" << std::endl;
+                    break;
+                }
+            }
+        }
 
         if (m.state == MouseState::Stunned) {
             m.stunTimer -= deltaTime;
@@ -659,24 +711,50 @@ void Gameplay::UpdateMice(float deltaTime) {
                 }
             }
 
-            // Distance check to Cat
+            // Vector math to Cat
             float centerX = m.rect.x + (m.rect.w / 2.0f);
             float centerY = m.rect.y + (m.rect.h / 2.0f);
             float catCenterX = catRect.x + (catRect.w / 2.0f);
             float catCenterY = catRect.y + (catRect.h / 2.0f);
 
-            float dx = centerX - catCenterX;
-            float dy = centerY - catCenterY;
+            float dx = catCenterX - centerX;
+            float dy = catCenterY - centerY;
             float distance = std::sqrt(dx * dx + dy * dy);
 
+            // Armed Mouse Firing Logic
+            if (m.equippedItem != ItemType::None && m.ammo > 0) {
+                m.shootCooldown -= deltaTime;
+                if (distance < 350.0f && m.shootCooldown <= 0.0f) {
+                    m.shootCooldown = 2.0f;
+                    m.ammo--;
+
+                    Projectile p;
+                    p.rect.x = centerX - 4.0f;
+                    p.rect.y = centerY - 4.0f;
+                    p.dirX = dx / distance;
+                    p.dirY = dy / distance;
+                    p.speed = (m.equippedItem == ItemType::LaserBlaster) ? 750.0f : 450.0f;
+                    p.type = m.equippedItem;
+                    p.isFiredByMouse = true;
+
+                    activeProjectiles.push_back(p);
+                    std::cout << "*ARMED MOUSE SHOT AT THE CAT!*" << std::endl;
+
+                    if (m.ammo <= 0) {
+                        m.equippedItem = ItemType::None;
+                    }
+                }
+            }
+
+            // Flee / Wander logic
             if (distance < 200.0f) {
                 m.state = MouseState::Flee;
             }
 
             if (m.state == MouseState::Flee) {
                 if (distance > 0.0001f) {
-                    m.dirX = dx / distance;
-                    m.dirY = dy / distance;
+                    m.dirX = -dx / distance;
+                    m.dirY = -dy / distance;
                 }
                 m.speed = 180.0f;
 
@@ -698,10 +776,11 @@ void Gameplay::UpdateMice(float deltaTime) {
             m.rect.x += m.dirX * m.speed * deltaTime;
             m.rect.y += m.dirY * m.speed * deltaTime;
 
-            if (m.rect.x < 50.0f)   { m.rect.x = 50.0f;   m.dirX *= -1.0f; }
-            if (m.rect.x > 1200.0f) { m.rect.x = 1200.0f; m.dirX *= -1.0f; }
-            if (m.rect.y < 80.0f)   { m.rect.y = 80.0f;   m.dirY *= -1.0f; }
-            if (m.rect.y > 650.0f)  { m.rect.y = 650.0f;  m.dirY *= -1.0f; }
+            // Room Boundary Clamping
+            if (m.rect.x < bounds.x) { m.rect.x = bounds.x; m.dirX *= -1.0f; }
+            if (m.rect.x + m.rect.w > bounds.x + bounds.w) { m.rect.x = bounds.x + bounds.w - m.rect.w; m.dirX *= -1.0f; }
+            if (m.rect.y < bounds.y) { m.rect.y = bounds.y; m.dirY *= -1.0f; }
+            if (m.rect.y + m.rect.h > bounds.y + bounds.h) { m.rect.y = bounds.y + bounds.h - m.rect.h; m.dirY *= -1.0f; }
         }
 
         // Cat Catches Mouse Check
@@ -719,6 +798,51 @@ void Gameplay::UpdateMice(float deltaTime) {
 
     if (GetTotalHouseMiceCount() == 0) {
         AdvanceToNextRound();
+    }
+}
+
+void Gameplay::UpdateProjectiles(float deltaTime) {
+    RoomState& currentRoom = house[currentRoomID];
+    std::vector<size_t> expiredProjectiles;
+
+    for (size_t i = 0; i < activeProjectiles.size(); ++i) {
+        Projectile& p = activeProjectiles[i];
+        p.lifetime -= deltaTime;
+
+        p.rect.x += p.dirX * p.speed * deltaTime;
+        p.rect.y += p.dirY * p.speed * deltaTime;
+
+        if (p.lifetime <= 0.0f) {
+            expiredProjectiles.push_back(i);
+            continue;
+        }
+
+        if (p.isFiredByMouse) {
+            // Mouse projectile hits Cat -> Stun Cat!
+            if (SDL_HasRectIntersectionFloat(&p.rect, &catRect)) {
+                stunTimer = 3.0f; // Cat stunned for 3 seconds
+                std::cout << "*CAT WAS STUNNED BY MOUSE PROJECTILE!*" << std::endl;
+                expiredProjectiles.push_back(i);
+            }
+        } else {
+            // Cat projectile hits Mouse -> Stun Mouse!
+            for (auto& mouse : currentRoom.mice) {
+                if (SDL_HasRectIntersectionFloat(&p.rect, &mouse.rect)) {
+                    mouse.state = MouseState::Stunned;
+                    mouse.stunTimer = 4.0f;
+                    std::cout << "MOUSE STUNNED BY CAT PROJECTILE!" << std::endl;
+                    expiredProjectiles.push_back(i);
+                    break;
+                }
+            }
+        }
+    }
+
+    for (int i = (int)expiredProjectiles.size() - 1; i >= 0; --i) {
+        size_t index = expiredProjectiles[i];
+        if (index < activeProjectiles.size()) {
+            activeProjectiles.erase(activeProjectiles.begin() + index);
+        }
     }
 }
 
@@ -742,12 +866,33 @@ void Gameplay::RenderMice(SDL_Renderer* renderer) {
 
     for (const auto& mouse : currentRoom.mice) {
         if (mouse.state == MouseState::Flee) {
-            SDL_SetRenderDrawColor(renderer, 230, 60, 60, 255);
+            SDL_SetRenderDrawColor(renderer, 230, 60, 60, 255); // Red
         } else if (mouse.state == MouseState::Stunned) {
-            SDL_SetRenderDrawColor(renderer, 220, 220, 60, 255);
+            SDL_SetRenderDrawColor(renderer, 220, 220, 60, 255); // Yellow
+        } else if (mouse.equippedItem != ItemType::None) {
+            SDL_SetRenderDrawColor(renderer, 255, 128, 0, 255);  // Bright Orange for Armed Mice
         } else {
-            SDL_SetRenderDrawColor(renderer, 180, 180, 180, 255);
+            SDL_SetRenderDrawColor(renderer, 180, 180, 180, 255); // Light Grey
         }
         SDL_RenderFillRect(renderer, &mouse.rect);
     }
+}
+
+SDL_FRect Gameplay::GetRoomBounds(RoomID roomID, float windowWidth, float windowHeight) const {
+    // If window size hasn't been retrieved properly yet, fallback to 1280x720 baseline
+    if (windowWidth <= 0.0f) windowWidth = 1280.0f;
+    if (windowHeight <= 0.0f) windowHeight = 720.0f;
+
+    float maxRoomW = windowWidth * (2.0f / 3.0f);
+    float maxRoomH = windowHeight * (2.0f / 3.0f);
+    float startX = (windowWidth - maxRoomW) / 2.0f;
+    float startY = (windowHeight - maxRoomH) / 2.0f + 25.0f; // Offset 25px down for top HUD bar
+
+    if (roomID == RoomID::Hallway) {
+        float hallwayH = maxRoomH * 0.5f;
+        float hallwayY = startY + (maxRoomH - hallwayH) / 2.0f;
+        return SDL_FRect{ startX, hallwayY, maxRoomW, hallwayH };
+    }
+
+    return SDL_FRect{ startX, startY, maxRoomW, maxRoomH };
 }
