@@ -2,6 +2,7 @@
 #include <SDL3/SDL.h>
 #include <string>
 #include <vector>
+#include <map>
 
 enum class RoomID {
     LivingRoom,
@@ -102,4 +103,35 @@ struct RoomState {
     std::vector<Item> items;
     bool humanPresent = false;
     int miceCount = 0;
+};
+
+// Struct representing relative door configurations (0.0 to 1.0 wall ratios)
+struct DoorConfig {
+    float relX;      // 0.0 = Left edge, 1.0 = Right edge
+    float relY;      // 0.0 = Top edge, 1.0 = Bottom edge
+    float width;
+    float height;
+    RoomID targetRoom;
+    std::string label;
+};
+
+// Struct representing potential furniture spawn choices
+struct FurnitureSpawnOption {
+    std::string name;
+    float relX;       // Relative offset (0.0 to 1.0 inside room bounds)
+    float relY;
+    float width;
+    float height;
+    FurnitureType type;
+    float spawnChance; // 0.0 to 1.0 probability
+};
+
+// Master Template for generating room instances
+struct RoomTemplate {
+    RoomID id;
+    std::string name;
+    std::vector<DoorConfig> doorConfigs;
+    std::vector<FurnitureSpawnOption> furniturePool;
+    ItemType defaultItem = ItemType::None;
+    int baseItemAmmo = 3;
 };

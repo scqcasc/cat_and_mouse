@@ -19,6 +19,8 @@ public:
     void Render(SDL_Renderer* renderer, TTF_Font* fontUI);
 
 private:
+    std::map<RoomID, RoomTemplate> roomTemplates;
+
     int score = 0;
     int highScore = 0;
     
@@ -60,6 +62,8 @@ private:
     bool moveDownPressed = false;
 
     // Helper Methods
+    void DefineRoomTemplates();
+    RoomState InstantiateRoomFromTemplate(const RoomTemplate& tmpl, float windowW, float windowH, int roundNum);
     SDL_FRect GetRoomBounds(RoomID roomID, float windowWidth, float windowHeight) const;
     void ProcessCatMovement(float deltaTime);
     void CheckDoorTransitions();

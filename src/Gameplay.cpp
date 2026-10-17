@@ -11,117 +11,184 @@ Gameplay::Gameplay() {
 
 Gameplay::~Gameplay() {}
 
+void Gameplay::DefineRoomTemplates() {
+    roomTemplates.clear();
+
+    // 1. Living Room Template
+    RoomTemplate livingRoom;
+    livingRoom.id = RoomID::LivingRoom;
+    livingRoom.name = "Living Room";
+    livingRoom.defaultItem = ItemType::Slingshot;
+    livingRoom.baseItemAmmo = 5;
+    livingRoom.doorConfigs = {
+        { 1.0f, 0.5f, 20.0f, 80.0f, RoomID::Hallway, "To Hallway" },
+        { 0.5f, 1.0f, 80.0f, 20.0f, RoomID::Kitchen, "To Kitchen" }
+    };
+    livingRoom.furniturePool = {
+        { "Couch",        0.2f, 0.2f, 140.0f, 70.0f, FurnitureType::Moveable, 1.0f },
+        { "Coffee Table", 0.3f, 0.45f, 80.0f,  40.0f, FurnitureType::Flippable, 0.8f },
+        { "Bookcase",     0.05f, 0.25f, 40.0f, 100.0f, FurnitureType::Flippable, 0.7f },
+        { "TV Stand",     0.55f, 0.05f, 100.0f, 35.0f, FurnitureType::Moveable,  0.9f },
+        { "Armchair",     0.75f, 0.3f,  60.0f,  60.0f, FurnitureType::Moveable,  0.5f } // Dynamic extra
+    };
+    roomTemplates[RoomID::LivingRoom] = livingRoom;
+
+    // 2. Kitchen Template
+    RoomTemplate kitchen;
+    kitchen.id = RoomID::Kitchen;
+    kitchen.name = "Kitchen";
+    kitchen.defaultItem = ItemType::ToyRobot;
+    kitchen.baseItemAmmo = 2;
+    kitchen.doorConfigs = {
+        { 0.5f, 0.0f, 80.0f, 20.0f, RoomID::LivingRoom, "To Living Room" }
+    };
+    kitchen.furniturePool = {
+        { "Stove",        0.05f, 0.05f, 70.0f, 70.0f, FurnitureType::Static,   1.0f },
+        { "Refrigerator", 0.2f,  0.05f, 70.0f, 80.0f, FurnitureType::Static,   1.0f },
+        { "Dining Table", 0.45f, 0.4f, 120.0f, 80.0f, FurnitureType::Flippable, 0.85f },
+        { "Kitchen Island", 0.5f, 0.1f, 100.0f, 50.0f, FurnitureType::Static,   0.4f }
+    };
+    roomTemplates[RoomID::Kitchen] = kitchen;
+
+    // 3. Hallway Template
+    RoomTemplate hallway;
+    hallway.id = RoomID::Hallway;
+    hallway.name = "Hallway";
+    hallway.doorConfigs = {
+        { 0.0f, 0.5f, 20.0f, 80.0f, RoomID::LivingRoom, "To Living Room" },
+        { 0.3f, 0.0f, 80.0f, 20.0f, RoomID::MasterBedroom, "To Master Bed" },
+        { 0.7f, 0.0f, 80.0f, 20.0f, RoomID::GuestBedroom,  "To Guest Bed" }
+    };
+    hallway.furniturePool = {
+        { "Lamp",        0.25f, 0.2f, 35.0f, 35.0f, FurnitureType::Moveable, 0.75f },
+        { "Night Stand", 0.6f,  0.2f, 45.0f, 45.0f, FurnitureType::Moveable, 0.75f },
+        { "Coat Rack",   0.85f, 0.2f, 30.0f, 30.0f, FurnitureType::Moveable, 0.5f }
+    };
+    roomTemplates[RoomID::Hallway] = hallway;
+
+    // 4. Master Bedroom Template
+    RoomTemplate masterBed;
+    masterBed.id = RoomID::MasterBedroom;
+    masterBed.name = "Master Bedroom";
+    masterBed.defaultItem = ItemType::LaserBlaster;
+    masterBed.baseItemAmmo = 3;
+    masterBed.doorConfigs = {
+        { 0.5f, 1.0f, 80.0f, 20.0f, RoomID::Hallway, "To Hallway" }
+    };
+    masterBed.furniturePool = {
+        { "Bed",         0.2f, 0.2f, 120.0f, 150.0f, FurnitureType::Static,   1.0f },
+        { "Night Stand", 0.08f, 0.2f, 45.0f,  45.0f,  FurnitureType::Moveable, 0.8f },
+        { "Cabinet",     0.65f, 0.2f, 70.0f,  100.0f, FurnitureType::Moveable, 0.85f }
+    };
+    roomTemplates[RoomID::MasterBedroom] = masterBed;
+
+    // 5. Guest Bedroom Template
+    RoomTemplate guestBed;
+    guestBed.id = RoomID::GuestBedroom;
+    guestBed.name = "Guest Bedroom";
+    guestBed.doorConfigs = {
+        { 0.5f, 1.0f, 80.0f, 20.0f, RoomID::Hallway, "To Hallway" }
+    };
+    guestBed.furniturePool = {
+        { "Bed",              0.3f, 0.2f, 120.0f, 150.0f, FurnitureType::Static,   1.0f },
+        { "Chest of Drawers", 0.65f, 0.2f, 60.0f,  90.0f,  FurnitureType::Moveable, 0.8f }
+    };
+    roomTemplates[RoomID::GuestBedroom] = guestBed;
+}
+
+RoomState Gameplay::InstantiateRoomFromTemplate(const RoomTemplate& tmpl, float windowW, float windowH, int roundNum) {
+    RoomState room;
+    room.id = tmpl.id;
+    room.name = tmpl.name;
+
+    SDL_FRect bounds = GetRoomBounds(tmpl.id, windowW, windowH);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<float> chanceDist(0.0f, 1.0f);
+
+    // 1. Instantiate Doors
+    for (const auto& dConfig : tmpl.doorConfigs) {
+        Door door;
+        door.targetRoom = dConfig.targetRoom;
+        door.label = dConfig.label;
+        door.rect.w = dConfig.width;
+        door.rect.h = dConfig.height;
+
+        // Position flush to wall edges using relative placement ratios
+        if (dConfig.relX == 0.0f)      door.rect.x = bounds.x;
+        else if (dConfig.relX == 1.0f) door.rect.x = bounds.x + bounds.w - dConfig.width;
+        else                           door.rect.x = bounds.x + (bounds.w * dConfig.relX) - (dConfig.width / 2.0f);
+
+        if (dConfig.relY == 0.0f)      door.rect.y = bounds.y;
+        else if (dConfig.relY == 1.0f) door.rect.y = bounds.y + bounds.h - dConfig.height;
+        else                           door.rect.y = bounds.y + (bounds.h * dConfig.relY) - (dConfig.height / 2.0f);
+
+        room.doors.push_back(door);
+    }
+
+    // 2. Instantiate Furniture based on spawn probabilities
+    for (const auto& option : tmpl.furniturePool) {
+        if (chanceDist(gen) <= option.spawnChance) {
+            Furniture f;
+            f.name = option.name;
+            f.type = option.type;
+            f.rect.w = option.width;
+            f.rect.h = option.height;
+            f.rect.x = bounds.x + (bounds.w * option.relX);
+            f.rect.y = bounds.y + (bounds.h * option.relY);
+
+            room.furniture.push_back(f);
+        }
+    }
+
+    // 3. Instantiate Items
+    if (tmpl.defaultItem != ItemType::None) {
+        std::uniform_real_distribution<float> posX(bounds.x + 60.0f, bounds.x + bounds.w - 80.0f);
+        std::uniform_real_distribution<float> posY(bounds.y + 60.0f, bounds.y + bounds.h - 80.0f);
+
+        Item item;
+        item.type = tmpl.defaultItem;
+        item.ammo = tmpl.baseItemAmmo;
+        item.rect = { posX(gen), posY(gen), 22.0f, 22.0f };
+        item.spawned = true;
+
+        room.items.push_back(item);
+    }
+
+    // 4. Instantiate Mice
+    std::uniform_int_distribution<int> miceChance(1 + (roundNum / 2), 3 + (roundNum / 2));
+    int mouseCount = miceChance(gen);
+
+    std::uniform_real_distribution<float> mouseX(bounds.x + 40.0f, bounds.x + bounds.w - 60.0f);
+    std::uniform_real_distribution<float> mouseY(bounds.y + 40.0f, bounds.y + bounds.h - 60.0f);
+
+    for (int i = 0; i < mouseCount; ++i) {
+        Mouse m;
+        m.rect.x = mouseX(gen);
+        m.rect.y = mouseY(gen);
+        m.speed = 120.0f + (roundNum * 10.0f);
+        room.mice.push_back(m);
+    }
+    room.miceCount = (int)room.mice.size();
+
+    return room;
+}
 
 void Gameplay::InitializeHouse(float windowWidth, float windowHeight) {
     house.clear();
 
-    // Fallback safety if 0 or uninitialized dimensions are passed
-    if (windowWidth <= 0.0f) windowWidth = 1280.0f;
-    if (windowHeight <= 0.0f) windowHeight = 720.0f;
+    if (roomTemplates.empty()) {
+        DefineRoomTemplates();
+    }
 
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<int> miceChance(1, 3);
+    for (const auto& pair : roomTemplates) {
+        house[pair.first] = InstantiateRoomFromTemplate(pair.second, windowWidth, windowHeight, roundNumber);
+    }
 
-    // Compute exact room bounds based on live window size
+    house[RoomID::LivingRoom].humanPresent = true;
+
     SDL_FRect roomBounds = GetRoomBounds(RoomID::LivingRoom, windowWidth, windowHeight);
-    SDL_FRect hallwayBounds = GetRoomBounds(RoomID::Hallway, windowWidth, windowHeight);
-
-    auto PopulateMice = [&](int count, const SDL_FRect& bounds) {
-        std::vector<Mouse> miceList;
-        std::uniform_real_distribution<float> posX(bounds.x + 40.0f, bounds.x + bounds.w - 60.0f);
-        std::uniform_real_distribution<float> posY(bounds.y + 40.0f, bounds.y + bounds.h - 60.0f);
-        for (int i = 0; i < count; ++i) {
-            Mouse m;
-            m.rect.x = posX(gen);
-            m.rect.y = posY(gen);
-            miceList.push_back(m);
-        }
-        return miceList;
-    };
-
-    // 1. Living Room
-    RoomState livingRoom;
-    livingRoom.id = RoomID::LivingRoom;
-    livingRoom.name = "Living Room";
-    livingRoom.humanPresent = true;
-    livingRoom.mice = PopulateMice(miceChance(gen), roomBounds);
-    livingRoom.items = { { { roomBounds.x + roomBounds.w - 80.0f, roomBounds.y + 80.0f, 22.0f, 22.0f }, ItemType::Slingshot, 5, true } };
-    livingRoom.furniture = {
-        { "Couch",        { roomBounds.x + 100.0f, roomBounds.y + 80.0f,  140.0f, 70.0f }, FurnitureType::Moveable },
-        { "Coffee Table", { roomBounds.x + 140.0f, roomBounds.y + 180.0f, 80.0f,  40.0f }, FurnitureType::Flippable },
-        { "Bookcase",     { roomBounds.x + 20.0f,  roomBounds.y + 100.0f, 40.0f, 100.0f }, FurnitureType::Flippable },
-        { "TV",           { roomBounds.x + 280.0f, roomBounds.y + 20.0f,  100.0f, 35.0f }, FurnitureType::Moveable }
-    };
-    livingRoom.doors = {
-        { { roomBounds.x + roomBounds.w - 20.0f, roomBounds.y + (roomBounds.h / 2.0f) - 40.0f, 20.0f, 80.0f }, RoomID::Hallway, "To Hallway" },
-        { { roomBounds.x + (roomBounds.w / 2.0f) - 40.0f, roomBounds.y + roomBounds.h - 20.0f, 80.0f, 20.0f },  RoomID::Kitchen, "To Kitchen" }
-    };
-    house[RoomID::LivingRoom] = livingRoom;
-
-    // 2. Kitchen
-    RoomState kitchen;
-    kitchen.id = RoomID::Kitchen;
-    kitchen.name = "Kitchen";
-    kitchen.mice = PopulateMice(miceChance(gen), roomBounds);
-    kitchen.items = { { { roomBounds.x + 80.0f, roomBounds.y + roomBounds.h - 80.0f, 22.0f, 22.0f }, ItemType::ToyRobot, 2, true } };
-    kitchen.furniture = {
-        { "Stove",        { roomBounds.x + 30.0f,  roomBounds.y + 30.0f,  70.0f, 70.0f }, FurnitureType::Static },
-        { "Refrigerator", { roomBounds.x + 120.0f, roomBounds.y + 30.0f,  70.0f, 80.0f }, FurnitureType::Static },
-        { "Dining Table", { roomBounds.x + 260.0f, roomBounds.y + 180.0f, 120.0f, 80.0f }, FurnitureType::Flippable }
-    };
-    kitchen.doors = {
-        { { roomBounds.x + (roomBounds.w / 2.0f) - 40.0f, roomBounds.y, 80.0f, 20.0f }, RoomID::LivingRoom, "To Living Room" }
-    };
-    house[RoomID::Kitchen] = kitchen;
-
-    // 3. Hallway (Narrow Viewport)
-    RoomState hallway;
-    hallway.id = RoomID::Hallway;
-    hallway.name = "Hallway";
-    hallway.mice = PopulateMice(miceChance(gen), hallwayBounds);
-    hallway.furniture = {
-        { "Lamp",       { hallwayBounds.x + 180.0f, hallwayBounds.y + 40.0f, 35.0f, 35.0f }, FurnitureType::Moveable },
-        { "Night Stand",{ hallwayBounds.x + 420.0f, hallwayBounds.y + 40.0f, 45.0f, 45.0f }, FurnitureType::Moveable }
-    };
-    hallway.doors = {
-        { { hallwayBounds.x, hallwayBounds.y + (hallwayBounds.h / 2.0f) - 40.0f, 20.0f, 80.0f }, RoomID::LivingRoom, "To Living Room" },
-        { { hallwayBounds.x + 180.0f, hallwayBounds.y, 80.0f, 20.0f }, RoomID::MasterBedroom, "To Master Bed" },
-        { { hallwayBounds.x + 500.0f, hallwayBounds.y, 80.0f, 20.0f }, RoomID::GuestBedroom,  "To Guest Bed" }
-    };
-    house[RoomID::Hallway] = hallway;
-
-    // 4. Master Bedroom
-    RoomState masterBed;
-    masterBed.id = RoomID::MasterBedroom;
-    masterBed.name = "Master Bedroom";
-    masterBed.mice = PopulateMice(miceChance(gen), roomBounds);
-    masterBed.items = { { { roomBounds.x + 380.0f, roomBounds.y + 100.0f, 22.0f, 22.0f }, ItemType::LaserBlaster, 3, true } };
-    masterBed.furniture = {
-        { "Bed",         { roomBounds.x + 100.0f, roomBounds.y + 80.0f, 120.0f, 150.0f }, FurnitureType::Static },
-        { "Night Stand", { roomBounds.x + 40.0f,  roomBounds.y + 80.0f, 45.0f, 45.0f },   FurnitureType::Moveable },
-        { "Cabinet",     { roomBounds.x + 350.0f, roomBounds.y + 80.0f, 70.0f, 100.0f },  FurnitureType::Moveable }
-    };
-    masterBed.doors = {
-        { { roomBounds.x + (roomBounds.w / 2.0f) - 40.0f, roomBounds.y + roomBounds.h - 20.0f, 80.0f, 20.0f }, RoomID::Hallway, "To Hallway" }
-    };
-    house[RoomID::MasterBedroom] = masterBed;
-
-    // 5. Guest Bedroom
-    RoomState guestBed;
-    guestBed.id = RoomID::GuestBedroom;
-    guestBed.name = "Guest Bedroom";
-    guestBed.mice = PopulateMice(miceChance(gen), roomBounds);
-    guestBed.furniture = {
-        { "Bed",             { roomBounds.x + 180.0f, roomBounds.y + 80.0f, 120.0f, 150.0f }, FurnitureType::Static },
-        { "Chest of Drawers",{ roomBounds.x + 380.0f, roomBounds.y + 80.0f, 60.0f, 90.0f },   FurnitureType::Moveable }
-    };
-    guestBed.doors = {
-        { { roomBounds.x + (roomBounds.w / 2.0f) - 40.0f, roomBounds.y + roomBounds.h - 20.0f, 80.0f, 20.0f }, RoomID::Hallway, "To Hallway" }
-    };
-    house[RoomID::GuestBedroom] = guestBed;
-
-    // Place Cat inside initial Living Room bounds
     catRect.x = roomBounds.x + 100.0f;
     catRect.y = roomBounds.y + 200.0f;
 }
