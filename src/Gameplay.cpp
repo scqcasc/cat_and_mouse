@@ -194,120 +194,134 @@ void Gameplay::Update(float deltaTime, const ControlsMenu& controls) {
         }
     }
 
+    // --- Cat Input & Movement Pass (Skipped if Cat is Stunned) ---
+    if (stunTimer > 0.0f) {
+        stunTimer -= deltaTime;
+    } else {
+        ProcessCatMovement(deltaTime);
+        CheckDoorTransitions();
+        
+        SDL_FRect bounds = GetRoomBounds(currentRoomID, windowWidth, windowHeight);
+        ClampCatToBounds(bounds);
+        
+        CheckItemPickups();
+        CheckCatHumanCollision();
+    }
+
+    // --- Subsystems Pass (Runs continually) ---
+    UpdateHuman(deltaTime);
+    UpdateMice(deltaTime);
+    UpdateProjectiles(deltaTime);
+}
+
+void Gameplay::ProcessCatMovement(float deltaTime) {
+    float moveX = 0.0f;
+    float moveY = 0.0f;
+
+    if (moveLeftPressed)  moveX -= 1.0f;
+    if (moveRightPressed) moveX += 1.0f;
+    if (moveUpPressed)    moveY -= 1.0f;
+    if (moveDownPressed)  moveY += 1.0f;
+
+    if (moveX != 0.0f || moveY != 0.0f) {
+        lastFacingX = moveX;
+        lastFacingY = moveY;
+    }
+
+    if (moveX != 0.0f && moveY != 0.0f) {
+        moveX *= 0.7071f;
+        moveY *= 0.7071f;
+    }
+
     RoomState& currentRoom = house[currentRoomID];
     SDL_FRect bounds = GetRoomBounds(currentRoomID, windowWidth, windowHeight);
 
-    // --- Only Process Cat Movement & Input if NOT Stunned ---
-    if (stunTimer > 0.0f) {
-        stunTimer -= deltaTime; // Countdown stun clock while game world runs!
-    } else {
-        float moveX = 0.0f;
-        float moveY = 0.0f;
-
-        if (moveLeftPressed)  moveX -= 1.0f;
-        if (moveRightPressed) moveX += 1.0f;
-        if (moveUpPressed)    moveY -= 1.0f;
-        if (moveDownPressed)  moveY += 1.0f;
-
-        if (moveX != 0.0f || moveY != 0.0f) {
-            lastFacingX = moveX;
-            lastFacingY = moveY;
-        }
-
-        if (moveX != 0.0f && moveY != 0.0f) {
-            moveX *= 0.7071f;
-            moveY *= 0.7071f;
-        }
-
-        // 1. Cat Movement & Furniture Collision with Wall Clamping
-        catRect.x += moveX * catSpeed * deltaTime;
-        for (auto& item : currentRoom.furniture) {
-            if (SDL_HasRectIntersectionFloat(&catRect, &item.rect)) {
-                if (item.type == FurnitureType::Static) {
-                    if (moveX > 0) catRect.x = item.rect.x - catRect.w;
-                    else if (moveX < 0) catRect.x = item.rect.x + item.rect.w;
-                } else {
-                    item.rect.x += moveX * (catSpeed * 0.4f) * deltaTime;
-                    if (item.rect.x < bounds.x) {
-                        item.rect.x = bounds.x;
-                        catRect.x = item.rect.x + item.rect.w;
-                    }
-                    else if (item.rect.x + item.rect.w > bounds.x + bounds.w) {
-                        item.rect.x = bounds.x + bounds.w - item.rect.w;
-                        catRect.x = item.rect.x - catRect.w;
-                    }
+    // X Axis Movement & Furniture Push
+    catRect.x += moveX * catSpeed * deltaTime;
+    for (auto& item : currentRoom.furniture) {
+        if (SDL_HasRectIntersectionFloat(&catRect, &item.rect)) {
+            if (item.type == FurnitureType::Static) {
+                if (moveX > 0) catRect.x = item.rect.x - catRect.w;
+                else if (moveX < 0) catRect.x = item.rect.x + item.rect.w;
+            } else {
+                item.rect.x += moveX * (catSpeed * 0.4f) * deltaTime;
+                if (item.rect.x < bounds.x) {
+                    item.rect.x = bounds.x;
+                    catRect.x = item.rect.x + item.rect.w;
+                } else if (item.rect.x + item.rect.w > bounds.x + bounds.w) {
+                    item.rect.x = bounds.x + bounds.w - item.rect.w;
+                    catRect.x = item.rect.x - catRect.w;
                 }
-            }
-        }
-
-        catRect.y += moveY * catSpeed * deltaTime;
-        for (auto& item : currentRoom.furniture) {
-            if (SDL_HasRectIntersectionFloat(&catRect, &item.rect)) {
-                if (item.type == FurnitureType::Static) {
-                    if (moveY > 0) catRect.y = item.rect.y - catRect.h;
-                    else if (moveY < 0) catRect.y = item.rect.y + item.rect.h;
-                } else {
-                    item.rect.y += moveY * (catSpeed * 0.4f) * deltaTime;
-                    if (item.rect.y < bounds.y) {
-                        item.rect.y = bounds.y;
-                        catRect.y = item.rect.y + item.rect.h;
-                    }
-                    else if (item.rect.y + item.rect.h > bounds.y + bounds.h) {
-                        item.rect.y = bounds.y + bounds.h - item.rect.h;
-                        catRect.y = item.rect.y - catRect.h;
-                    }
-                }
-            }
-        }
-
-        // 2. Door Transitions
-        bool isPassingThroughDoor = false;
-        for (const auto& door : currentRoom.doors) {
-            if (SDL_HasRectIntersectionFloat(&catRect, &door.rect)) {
-                isPassingThroughDoor = true;
-                moveLeftPressed = moveRightPressed = moveUpPressed = moveDownPressed = false;
-                SwitchRoom(door.targetRoom, currentRoomID);
-                break;
-            }
-        }
-
-        // 3. Cat Wall Clamping
-        if (!isPassingThroughDoor) {
-            if (catRect.x < bounds.x) catRect.x = bounds.x;
-            if (catRect.x + catRect.w > bounds.x + bounds.w) catRect.x = bounds.x + bounds.w - catRect.w;
-            if (catRect.y < bounds.y) catRect.y = bounds.y;
-            if (catRect.y + catRect.h > bounds.y + bounds.h) catRect.y = bounds.y + bounds.h - catRect.h;
-        }
-
-        // 4. Cat Item Pickups
-        SDL_FRect catPickupBounds{ catRect.x - 5.0f, catRect.y - 5.0f, catRect.w + 10.0f, catRect.h + 10.0f };
-        for (auto& item : currentRoom.items) {
-            if (item.spawned && SDL_HasRectIntersectionFloat(&catPickupBounds, &item.rect)) {
-                item.spawned = false;
-                equippedItem = item.type;
-                itemAmmo = item.ammo;
-                std::cout << "*CAT PICKED UP ITEM! Equipped Ammo: " << itemAmmo << "*" << std::endl;
-            }
-        }
-
-        // 5. Cat Touches Human Check (-50% Anger Soothe)
-        if (currentRoom.humanPresent && human.touchCooldown <= 0.0f) {
-            if (SDL_HasRectIntersectionFloat(&catRect, &human.rect)) {
-                if (human.irritation > 0.0f) {
-                    human.irritation -= 50.0f;
-                    if (human.irritation < 0.0f) human.irritation = 0.0f;
-                    std::cout << "*CAT RUBBED HUMAN! Anger decreased by 50%! Current: " 
-                              << human.irritation << "%*" << std::endl;
-                }
-                human.touchCooldown = 1.5f;
             }
         }
     }
 
-    // --- Subsystems Update Continually (Even when Cat is Stunned) ---
-    UpdateHuman(deltaTime);
-    UpdateMice(deltaTime);
-    UpdateProjectiles(deltaTime);
+    // Y Axis Movement & Furniture Push
+    catRect.y += moveY * catSpeed * deltaTime;
+    for (auto& item : currentRoom.furniture) {
+        if (SDL_HasRectIntersectionFloat(&catRect, &item.rect)) {
+            if (item.type == FurnitureType::Static) {
+                if (moveY > 0) catRect.y = item.rect.y - catRect.h;
+                else if (moveY < 0) catRect.y = item.rect.y + item.rect.h;
+            } else {
+                item.rect.y += moveY * (catSpeed * 0.4f) * deltaTime;
+                if (item.rect.y < bounds.y) {
+                    item.rect.y = bounds.y;
+                    catRect.y = item.rect.y + item.rect.h;
+                } else if (item.rect.y + item.rect.h > bounds.y + bounds.h) {
+                    item.rect.y = bounds.y + bounds.h - item.rect.h;
+                    catRect.y = item.rect.y - catRect.h;
+                }
+            }
+        }
+    }
+}
+
+void Gameplay::CheckDoorTransitions() {
+    RoomState& currentRoom = house[currentRoomID];
+    for (const auto& door : currentRoom.doors) {
+        if (SDL_HasRectIntersectionFloat(&catRect, &door.rect)) {
+            moveLeftPressed = moveRightPressed = moveUpPressed = moveDownPressed = false;
+            SwitchRoom(door.targetRoom, currentRoomID);
+            break;
+        }
+    }
+}
+
+void Gameplay::ClampCatToBounds(const SDL_FRect& bounds) {
+    if (catRect.x < bounds.x) catRect.x = bounds.x;
+    if (catRect.x + catRect.w > bounds.x + bounds.w) catRect.x = bounds.x + bounds.w - catRect.w;
+    if (catRect.y < bounds.y) catRect.y = bounds.y;
+    if (catRect.y + catRect.h > bounds.y + bounds.h) catRect.y = bounds.y + bounds.h - catRect.h;
+}
+
+void Gameplay::CheckItemPickups() {
+    RoomState& currentRoom = house[currentRoomID];
+    SDL_FRect catPickupBounds{ catRect.x - 5.0f, catRect.y - 5.0f, catRect.w + 10.0f, catRect.h + 10.0f };
+
+    for (auto& item : currentRoom.items) {
+        if (item.spawned && SDL_HasRectIntersectionFloat(&catPickupBounds, &item.rect)) {
+            item.spawned = false;
+            equippedItem = item.type;
+            itemAmmo = item.ammo;
+            std::cout << "*CAT PICKED UP ITEM! Equipped Ammo: " << itemAmmo << "*" << std::endl;
+        }
+    }
+}
+
+void Gameplay::CheckCatHumanCollision() {
+    RoomState& currentRoom = house[currentRoomID];
+    if (currentRoom.humanPresent && human.touchCooldown <= 0.0f) {
+        if (SDL_HasRectIntersectionFloat(&catRect, &human.rect)) {
+            if (human.irritation > 0.0f) {
+                human.irritation -= 50.0f;
+                if (human.irritation < 0.0f) human.irritation = 0.0f;
+                std::cout << "*CAT RUBBED HUMAN! Anger decreased by 50%! Current: " 
+                          << human.irritation << "%*" << std::endl;
+            }
+            human.touchCooldown = 1.5f;
+        }
+    }
 }
 
 void Gameplay::RenderItems(SDL_Renderer* renderer) {

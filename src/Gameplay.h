@@ -61,6 +61,11 @@ private:
 
     // Helper Methods
     SDL_FRect GetRoomBounds(RoomID roomID, float windowWidth, float windowHeight) const;
+    void ProcessCatMovement(float deltaTime);
+    void CheckDoorTransitions();
+    void ClampCatToBounds(const SDL_FRect& bounds);
+    void CheckItemPickups();
+    void CheckCatHumanCollision();
     void AddScore(int points);
     void UpdateMice(float deltaTime);
     void UpdateHuman(float deltaTime);
