@@ -7,3 +7,4 @@
 * allow separate aim controls (like arrow buttons)
 * add a difficulty selector (Don't Hurt Me, Normal, Bring it On!)
 * save high scores
+* fix the game name in the main menu
