@@ -6,6 +6,8 @@
 #include <SDL3_ttf/SDL_ttf.h>
 #include <iostream>
 #include "Gameplay.h"
+#include "SoundManager.h"
+#include "SoundGenerator.h"
 
 int main(int argc, char* argv[]) {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -31,6 +33,22 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
+    // In main.cpp after SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)
+    // Generate audio assets on launch if they don't exist yet
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
+        std::cerr << "SDL_Init Error: " << SDL_GetError() << std::endl;
+        return -1;
+    }
+
+    SoundGenerator::GenerateAllAssets("assets/audio/");
+    if (SoundManager::Instance().Initialize()) {
+        SoundManager::Instance().LoadWAV(SoundEffect::Meow, "assets/audio/meow.wav");
+        SoundManager::Instance().LoadWAV(SoundEffect::Squeak, "assets/audio/squeak.wav");
+        SoundManager::Instance().LoadWAV(SoundEffect::Slingshot, "assets/audio/slingshot.wav");
+        SoundManager::Instance().LoadWAV(SoundEffect::Laser, "assets/audio/laser.wav");
+        SoundManager::Instance().LoadWAV(SoundEffect::Stun, "assets/audio/stun.wav");
+        SoundManager::Instance().LoadWAV(SoundEffect::RoundClear, "assets/audio/round_clear.wav");
+    }
     // Load a font for the gameplay HUD
     TTF_Font* fontUI = TTF_OpenFont("assets/fonts/static/Roboto-Regular.ttf", 18.0f);
 

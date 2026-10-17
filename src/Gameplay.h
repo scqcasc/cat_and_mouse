@@ -20,6 +20,10 @@ public:
 
 private:
     std::map<RoomID, RoomTemplate> roomTemplates;
+    bool wasStunSoundPlayed = false;
+    float scoreDecayTimer = 0.0f;
+    float scoreDecayRate = 1.0f; // Loses points every 1.0 second
+    int scoreDecayAmount = 10;   // Points lost per interval
 
     int score = 0;
     int highScore = 0;
@@ -62,6 +66,7 @@ private:
     bool moveDownPressed = false;
 
     // Helper Methods
+    void ProcessScoreDecay(float deltaTime);
     void DefineRoomTemplates();
     RoomState InstantiateRoomFromTemplate(const RoomTemplate& tmpl, float windowW, float windowH, int roundNum);
     SDL_FRect GetRoomBounds(RoomID roomID, float windowWidth, float windowHeight) const;

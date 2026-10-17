@@ -3,6 +3,7 @@
 #include <iostream>
 #include <random>
 #include <cmath>
+#include "SoundManager.h"
 
 Gameplay::Gameplay() {
     InitializeHouse();
@@ -10,6 +11,22 @@ Gameplay::Gameplay() {
 }
 
 Gameplay::~Gameplay() {}
+
+void Gameplay::ProcessScoreDecay(float deltaTime) {
+    // Only decay score if points have been scored and game is active
+    if (score <= 0 || isGameOver) return;
+
+    scoreDecayTimer += deltaTime;
+
+    if (scoreDecayTimer >= scoreDecayRate) {
+        scoreDecayTimer -= scoreDecayRate;
+        score -= scoreDecayAmount;
+
+        if (score < 0) {
+            score = 0;
+        }
+    }
+}
 
 void Gameplay::DefineRoomTemplates() {
     roomTemplates.clear();
@@ -207,8 +224,10 @@ void Gameplay::UseEquippedItem() {
     p.type = equippedItem;
 
     if (equippedItem == ItemType::Slingshot) {
+        SoundManager::Instance().Play(SoundEffect::Slingshot);
         p.speed = 550.0f;
     } else if (equippedItem == ItemType::LaserBlaster) {
+        SoundManager::Instance().Play(SoundEffect::Laser);
         p.speed = 850.0f;
     }
 
@@ -250,32 +269,40 @@ void Gameplay::HandleInput(const SDL_Event& event, GameState& currentState, cons
 void Gameplay::Update(float deltaTime, const ControlsMenu& controls) {
     if (isGameOver || !isHouseInitialized) return;
 
-    if (roundBannerTimer > 0.0f) {
-        roundBannerTimer -= deltaTime;
-    }
+    // ... round banner & outside penalty timer updates ...
 
-    if (outsidePenaltyTimer > 0.0f) {
-        outsidePenaltyTimer -= deltaTime;
-        if (outsidePenaltyTimer <= 0.0f) {
-            isOutside = false;
-        }
-    }
+    ProcessScoreDecay(deltaTime);
 
-    // --- Cat Input & Movement Pass (Skipped if Cat is Stunned) ---
+    // --- Cat Stun Handling ---
     if (stunTimer > 0.0f) {
         stunTimer -= deltaTime;
+
+        // Play stun sound ONCE at the start of the stun
+        if (!wasStunSoundPlayed) {
+            SoundManager::Instance().Play(SoundEffect::Stun);
+            wasStunSoundPlayed = true;
+        }
+
+        // When stun expires, clear audio stream and reset flag
+        if (stunTimer <= 0.0f) {
+            stunTimer = 0.0f;
+            wasStunSoundPlayed = false;
+            SoundManager::Instance().StopAll(); // Flush lingering audio!
+        }
     } else {
+        wasStunSoundPlayed = false;
+
         ProcessCatMovement(deltaTime);
         CheckDoorTransitions();
-        
+
         SDL_FRect bounds = GetRoomBounds(currentRoomID, windowWidth, windowHeight);
         ClampCatToBounds(bounds);
-        
+
         CheckItemPickups();
         CheckCatHumanCollision();
     }
 
-    // --- Subsystems Pass (Runs continually) ---
+    // --- Subsystems ---
     UpdateHuman(deltaTime);
     UpdateMice(deltaTime);
     UpdateProjectiles(deltaTime);
@@ -563,6 +590,7 @@ void Gameplay::Render(SDL_Renderer* renderer, TTF_Font* fontUI) {
 }
 
 void Gameplay::TriggerMeow() {
+    SoundManager::Instance().Play(SoundEffect::Meow);
     std::cout << "MEOW! Scared nearby mice!" << std::endl;
     RoomState& currentRoom = house[currentRoomID];
     
@@ -649,6 +677,7 @@ void Gameplay::AddScore(int points) {
 }
 
 void Gameplay::AdvanceToNextRound() {
+    SoundManager::Instance().Play(SoundEffect::RoundClear);
     // Award round completion bonus
     AddScore(500 * roundNumber);
 
@@ -818,6 +847,7 @@ void Gameplay::UpdateMice(float deltaTime) {
         }
 
         if (m.state == MouseState::Stunned) {
+            SoundManager::Instance().Play(SoundEffect::Stun);
             m.stunTimer -= deltaTime;
             if (m.stunTimer <= 0.0f) {
                 m.state = MouseState::Wander;
@@ -827,6 +857,7 @@ void Gameplay::UpdateMice(float deltaTime) {
             m.squeakTimer -= deltaTime;
             if (m.squeakTimer <= 0.0f) {
                 m.squeakTimer = 5.0f;
+                SoundManager::Instance().Play(SoundEffect::Squeak);
                 if (currentRoom.humanPresent) {
                     IncreaseHumanIrritation(10.0f);
                 }
@@ -921,6 +952,9 @@ void Gameplay::UpdateMice(float deltaTime) {
         currentRoom.mice.erase(currentRoom.mice.begin() + index);
         miceKilled++;
         currentRoom.miceCount = (int)currentRoom.mice.size();
+
+        // Flush sound queue when stunned mouse is defeated
+        SoundManager::Instance().StopAll();
     }
 
     if (GetTotalHouseMiceCount() == 0) {
@@ -948,6 +982,7 @@ void Gameplay::UpdateProjectiles(float deltaTime) {
             // Mouse projectile hits Cat -> Stun Cat!
             if (SDL_HasRectIntersectionFloat(&p.rect, &catRect)) {
                 stunTimer = 3.0f; // Cat stunned for 3 seconds
+                SoundManager::Instance().Play(SoundEffect::Stun);
                 std::cout << "*CAT WAS STUNNED BY MOUSE PROJECTILE!*" << std::endl;
                 expiredProjectiles.push_back(i);
             }
@@ -957,6 +992,7 @@ void Gameplay::UpdateProjectiles(float deltaTime) {
                 if (SDL_HasRectIntersectionFloat(&p.rect, &mouse.rect)) {
                     mouse.state = MouseState::Stunned;
                     mouse.stunTimer = 4.0f;
+                    SoundManager::Instance().Play(SoundEffect::Stun);
                     std::cout << "MOUSE STUNNED BY CAT PROJECTILE!" << std::endl;
                     expiredProjectiles.push_back(i);
                     break;

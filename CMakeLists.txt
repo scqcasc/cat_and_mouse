@@ -18,6 +18,10 @@ add_executable(cat_and_mouse
     src/GameTypes.h
     src/Gameplay.h
     src/Gameplay.cpp
+    src/SoundManager.cpp
+    src/SoundManager.h
+    src/SoundGenerator.h
+    src/SoundGenerator.cpp
 )
 
 if(WIN32)
