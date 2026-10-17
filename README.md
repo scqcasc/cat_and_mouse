@@ -2,7 +2,10 @@
 
 ## Building
 
-Make sure the mingw-w64-toolchain is installed.
+Make sure the mingw-w64-toolchain is installed. On CachyOS this is:
+```
+sudo pacman -S mingw-w64-toolchain
+```
 
 ```
   mkdir build_windows && cd build_windows
