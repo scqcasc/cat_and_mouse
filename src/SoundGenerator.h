@@ -17,6 +17,9 @@ public:
     static std::vector<int16_t> GenerateLaser();
     static std::vector<int16_t> GenerateStun();
     static std::vector<int16_t> GenerateRoundClear();
+    // Procedural snack sound synthesizers
+    static std::vector<int16_t> GeneratePowerUpSnack();
+    static std::vector<int16_t> GeneratePowerDownSnack();
 
     static bool SaveWAV(const std::string& filename, const std::vector<int16_t>& samples, int sampleRate = 44100);
 

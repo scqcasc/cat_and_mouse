@@ -4,6 +4,7 @@
 #include <random>
 #include <cmath>
 #include "SoundManager.h"
+#include <algorithm>
 
 Gameplay::Gameplay() {
     InitializeHouse();
@@ -11,6 +12,41 @@ Gameplay::Gameplay() {
 }
 
 Gameplay::~Gameplay() {}
+
+void Gameplay::ApplySnackEffect(ItemType snackType, SpeedEffect& effect) {
+    if (snackType == ItemType::PowerUpSnack) {
+        effect.modifier = 1.5f;       // +50% speed boost
+        effect.duration += 5.0f;      // Add 5 seconds to active timer
+        std::cout << "*EATEN POWER-UP SNACK! Speed Boost Activated!*" << std::endl;
+    } else if (snackType == ItemType::PowerDownSnack) {
+        effect.modifier = 0.6f;       // -40% speed penalty
+        effect.duration += 5.0f;      // Add 5 seconds to active timer
+        std::cout << "*EATEN POWER-DOWN SNACK! Slowed Down!*" << std::endl;
+    }
+}
+
+void Gameplay::UpdateSpeedEffects(float deltaTime) {
+    // Update Cat Speed Effect
+    if (catSpeedEffect.duration > 0.0f) {
+        catSpeedEffect.duration -= deltaTime;
+        if (catSpeedEffect.duration <= 0.0f) {
+            catSpeedEffect.duration = 0.0f;
+            catSpeedEffect.modifier = 1.0f; // Reset to normal speed
+        }
+    }
+
+    // Update Mice Speed Effects
+    RoomState& currentRoom = house[currentRoomID];
+    for (auto& mouse : currentRoom.mice) {
+        if (mouse.speedEffect.duration > 0.0f) {
+            mouse.speedEffect.duration -= deltaTime;
+            if (mouse.speedEffect.duration <= 0.0f) {
+                mouse.speedEffect.duration = 0.0f;
+                mouse.speedEffect.modifier = 1.0f;
+            }
+        }
+    }
+}
 
 void Gameplay::ProcessScoreDecay(float deltaTime) {
     // Only decay score if points have been scored and game is active
@@ -203,11 +239,36 @@ void Gameplay::InitializeHouse(float windowWidth, float windowHeight) {
         house[pair.first] = InstantiateRoomFromTemplate(pair.second, windowWidth, windowHeight, roundNumber);
     }
 
-    house[RoomID::LivingRoom].humanPresent = true;
+    // Set starting human room state cleanly
+    human.currentRoom = RoomID::LivingRoom;
+    previousHumanRoomID = RoomID::LivingRoom;
+    for (auto& pair : house) {
+        pair.second.humanPresent = (pair.first == human.currentRoom);
+    }
+
+    // Spawn initial starting snacks ONCE
+    RespawnSnacksInRoom(human.currentRoom);
 
     SDL_FRect roomBounds = GetRoomBounds(RoomID::LivingRoom, windowWidth, windowHeight);
     catRect.x = roomBounds.x + 100.0f;
     catRect.y = roomBounds.y + 200.0f;
+}
+
+void Gameplay::MoveHumanToRoom(RoomID newRoomID) {
+    if (human.currentRoom == newRoomID) return; // Prevent duplicate triggers!
+
+    // 1. Remove human from old room state
+    house[human.currentRoom].humanPresent = false;
+
+    // 2. Assign new room state
+    human.currentRoom = newRoomID;
+    house[human.currentRoom].humanPresent = true;
+
+    // 3. Trigger snack drop EXACTLY ONCE on room transfer
+    RespawnSnacksInRoom(human.currentRoom);
+    previousHumanRoomID = human.currentRoom;
+
+    std::cout << "HUMAN MOVED TO ROOM: " << static_cast<int>(human.currentRoom) << std::endl;
 }
 
 void Gameplay::UseEquippedItem() {
@@ -273,6 +334,9 @@ void Gameplay::Update(float deltaTime, const ControlsMenu& controls) {
 
     ProcessScoreDecay(deltaTime);
 
+    // --- Update Snack Speed Effect Timers ---
+    UpdateSpeedEffects(deltaTime);
+
     // --- Cat Stun Handling ---
     if (stunTimer > 0.0f) {
         stunTimer -= deltaTime;
@@ -330,8 +394,12 @@ void Gameplay::ProcessCatMovement(float deltaTime) {
     RoomState& currentRoom = house[currentRoomID];
     SDL_FRect bounds = GetRoomBounds(currentRoomID, windowWidth, windowHeight);
 
+    // Effective cat speed adjusted by active snack modifier
+    float currentCatSpeed = catSpeed * catSpeedEffect.modifier;
+
+    catRect.x += moveX * currentCatSpeed * deltaTime;
+
     // X Axis Movement & Furniture Push
-    catRect.x += moveX * catSpeed * deltaTime;
     for (auto& item : currentRoom.furniture) {
         if (SDL_HasRectIntersectionFloat(&catRect, &item.rect)) {
             if (item.type == FurnitureType::Static) {
@@ -395,12 +463,49 @@ void Gameplay::CheckItemPickups() {
 
     for (auto& item : currentRoom.items) {
         if (item.spawned && SDL_HasRectIntersectionFloat(&catPickupBounds, &item.rect)) {
-            item.spawned = false;
-            equippedItem = item.type;
-            itemAmmo = item.ammo;
-            std::cout << "*CAT PICKED UP ITEM! Equipped Ammo: " << itemAmmo << "*" << std::endl;
+            if (item.type == ItemType::PowerUpSnack || item.type == ItemType::PowerDownSnack) {
+                item.spawned = false; // Snack consumed
+                ApplySnackEffect(item.type, catSpeedEffect);
+            } else {
+                // Standard Weapon Pickups
+                item.spawned = false;
+                equippedItem = item.type;
+                itemAmmo = item.ammo;
+            }
         }
     }
+}
+
+void Gameplay::RespawnSnacksInRoom(RoomID roomID) {
+    RoomState& room = house[roomID];
+    
+    // Remove old uncollected snacks so they don't accumulate infinitely
+    room.items.erase(
+        std::remove_if(room.items.begin(), room.items.end(), [](const Item& item) {
+            return (item.type == ItemType::PowerUpSnack || item.type == ItemType::PowerDownSnack);
+        }),
+        room.items.end()
+    );
+
+    SDL_FRect bounds = GetRoomBounds(roomID, windowWidth, windowHeight);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<float> posX(bounds.x + 50.0f, bounds.x + bounds.w - 70.0f);
+    std::uniform_real_distribution<float> posY(bounds.y + 50.0f, bounds.y + bounds.h - 70.0f);
+    std::uniform_int_distribution<int> snackTypeDist(0, 1);
+    std::uniform_int_distribution<int> countDist(2, 3);
+
+    int count = countDist(gen);
+    for (int i = 0; i < count; ++i) {
+        Item snack;
+        snack.rect = { posX(gen), posY(gen), 16.0f, 16.0f };
+        snack.type = (snackTypeDist(gen) == 0) ? ItemType::PowerUpSnack : ItemType::PowerDownSnack;
+        snack.spawned = true;
+        
+        room.items.push_back(snack);
+    }
+    std::cout << "*HUMAN ENTERED ROOM! " << count << " fresh snacks distributed!*" << std::endl;
 }
 
 void Gameplay::CheckCatHumanCollision() {
@@ -420,17 +525,23 @@ void Gameplay::CheckCatHumanCollision() {
 
 void Gameplay::RenderItems(SDL_Renderer* renderer) {
     const RoomState& currentRoom = house[currentRoomID];
+    for (const auto& item : currentRoom.furniture) { /* ... */ }
 
     for (const auto& item : currentRoom.items) {
         if (!item.spawned) continue;
 
-        if (item.type == ItemType::Slingshot) {
-            SDL_SetRenderDrawColor(renderer, 220, 60, 220, 255); // Magenta Slingshot
+        if (item.type == ItemType::PowerUpSnack) {
+            SDL_SetRenderDrawColor(renderer, 255, 235, 50, 255); // Yellow
+        } else if (item.type == ItemType::PowerDownSnack) {
+            SDL_SetRenderDrawColor(renderer, 180, 50, 220, 255); // Purple
+        } else if (item.type == ItemType::Slingshot) {
+            SDL_SetRenderDrawColor(renderer, 220, 120, 40, 255);
         } else if (item.type == ItemType::LaserBlaster) {
-            SDL_SetRenderDrawColor(renderer, 60, 220, 240, 255); // Cyan Laser
+            SDL_SetRenderDrawColor(renderer, 50, 200, 255, 255);
         } else if (item.type == ItemType::ToyRobot) {
-            SDL_SetRenderDrawColor(renderer, 60, 220, 60, 255);  // Lime Robot
+            SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
         }
+
         SDL_RenderFillRect(renderer, &item.rect);
     }
 }
@@ -587,6 +698,7 @@ void Gameplay::Render(SDL_Renderer* renderer, TTF_Font* fontUI) {
     SDL_RenderFillRect(renderer, &catRect);
 
     RenderHUD(renderer, fontUI);
+    RenderSpeedEffectHUD(renderer);
 }
 
 void Gameplay::TriggerMeow() {
@@ -634,6 +746,7 @@ void Gameplay::SwitchRoom(RoomID nextRoom, RoomID previousRoom) {
         catRect.x = newBounds.x + (newBounds.w / 2.0f) - (catRect.w / 2.0f);
         catRect.y = newBounds.y + (newBounds.h / 2.0f) - (catRect.h / 2.0f);
     }
+
 }
 
 void Gameplay::ThrowCatOutside() {
@@ -772,9 +885,13 @@ void Gameplay::UpdateHuman(float deltaTime) {
 
         if (human.isHeadingToDoor) {
             if (distance < 10.0f) {
+                // --- INJECTED ROOM TRANSITION & SNACK DISTRIBUTION ---
                 house[humanRoomID].humanPresent = false;
                 humanRoomID = human.nextRoomID;
                 house[humanRoomID].humanPresent = true;
+
+                // Spawn fresh snacks EXACTLY ONCE upon entering the new room
+                RespawnSnacksInRoom(humanRoomID);
 
                 for (const auto& door : house[humanRoomID].doors) {
                     if (door.targetRoom == currentRoom.id) {
@@ -802,7 +919,6 @@ void Gameplay::UpdateHuman(float deltaTime) {
                 if (distance < 5.0f) {
                     std::random_device rd;
                     std::mt19937 gen(rd());
-                    // Pick wander targets strictly inside active room bounds
                     std::uniform_real_distribution<float> posX(bounds.x + 40.0f, bounds.x + bounds.w - 60.0f);
                     std::uniform_real_distribution<float> posY(bounds.y + 40.0f, bounds.y + bounds.h - 80.0f);
                     std::uniform_real_distribution<float> pauseDist(1.0f, 3.0f);
@@ -925,8 +1041,9 @@ void Gameplay::UpdateMice(float deltaTime) {
                 }
             }
 
-            m.rect.x += m.dirX * m.speed * deltaTime;
-            m.rect.y += m.dirY * m.speed * deltaTime;
+            float currentMouseSpeed = m.speed * m.speedEffect.modifier;
+            m.rect.x += m.dirX * currentMouseSpeed * deltaTime;
+            m.rect.y += m.dirY * currentMouseSpeed * deltaTime;
 
             // Room Boundary Clamping
             if (m.rect.x < bounds.x) { m.rect.x = bounds.x; m.dirX *= -1.0f; }
@@ -1058,4 +1175,37 @@ SDL_FRect Gameplay::GetRoomBounds(RoomID roomID, float windowWidth, float window
     }
 
     return SDL_FRect{ startX, startY, maxRoomW, maxRoomH };
+}
+
+void Gameplay::RenderSpeedEffectHUD(SDL_Renderer* renderer) {
+    if (catSpeedEffect.duration <= 0.0f) return;
+
+    // Position in HUD near top right below score/round stats
+    SDL_FRect hudBox{ windowWidth - 220.0f, 15.0f, 200.0f, 32.0f };
+
+    // 1. Draw HUD Background Box
+    SDL_SetRenderDrawColor(renderer, 20, 20, 20, 220); // Dark semi-transparent
+    SDL_RenderFillRect(renderer, &hudBox);
+
+    // 2. Set Status Color based on Modifier
+    if (catSpeedEffect.modifier > 1.0f) {
+        SDL_SetRenderDrawColor(renderer, 255, 235, 50, 255); // Yellow: Power-Up
+    } else {
+        SDL_SetRenderDrawColor(renderer, 180, 50, 220, 255); // Purple: Power-Down
+    }
+
+    // 3. Draw Outer Border
+    SDL_RenderRect(renderer, &hudBox);
+
+    // 4. Draw Time Remaining Bar inside Box
+    float maxDuration = 10.0f; // Scale bar relative to maximum typical stack
+    float fillRatio = std::min(catSpeedEffect.duration / maxDuration, 1.0f);
+
+    SDL_FRect barRect{
+        hudBox.x + 6.0f,
+        hudBox.y + 20.0f,
+        (hudBox.w - 12.0f) * fillRatio,
+        6.0f
+    };
+    SDL_RenderFillRect(renderer, &barRect);
 }

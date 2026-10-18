@@ -9,7 +9,9 @@ enum class SoundEffect {
     Slingshot,
     Laser,
     Stun,
-    RoundClear
+    RoundClear,
+    PowerUpSnack,
+    PowerDownSnack
 };
 
 class SoundManager {

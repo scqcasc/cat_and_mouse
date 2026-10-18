@@ -177,8 +177,57 @@ std::vector<int16_t> SoundGenerator::GenerateRoundClear() {
     return samples;
 }
 
+// Power-Up Snack: Quick crunch bite followed by a rising dual chime (E5 -> B5)
+std::vector<int16_t> SoundGenerator::GeneratePowerUpSnack() {
+    int sampleRate = 44100;
+    float duration = 0.25f;
+    int totalSamples = static_cast<int>(sampleRate * duration);
+    std::vector<int16_t> samples(totalSamples);
+
+    float phase = 0.0f;
+    for (int i = 0; i < totalSamples; ++i) {
+        float t = static_cast<float>(i) / totalSamples;
+
+        // Pitch step: First half E5 (659Hz), second half B5 (987Hz)
+        float freq = (t < 0.5f) ? 659.25f : 987.77f;
+        phase += (2.0f * PI * freq) / sampleRate;
+
+        // Envelope with initial chew noise burst
+        float env = std::sin(t * PI);
+        float tone = TriangleWave(phase);
+        float noise = WhiteNoise() * std::exp(-t * 20.0f); // Quick bite snap
+
+        float wave = (t < 0.1f) ? (0.6f * noise + 0.4f * tone) : tone;
+
+        samples[i] = static_cast<int16_t>(wave * env * 22000.0f);
+    }
+    return samples;
+}
+
+// Power-Down Snack: Bit-crushed downward pitch slide with wobble (G4 -> C4)
+std::vector<int16_t> SoundGenerator::GeneratePowerDownSnack() {
+    int sampleRate = 44100;
+    float duration = 0.30f;
+    int totalSamples = static_cast<int>(sampleRate * duration);
+    std::vector<int16_t> samples(totalSamples);
+
+    float phase = 0.0f;
+    for (int i = 0; i < totalSamples; ++i) {
+        float t = static_cast<float>(i) / totalSamples;
+
+        // Downward pitch slide with vibrato wobble
+        float freq = (392.00f * (1.0f - t * 0.35f)) + 30.0f * SquareWave(t * PI * 18.0f);
+        phase += (2.0f * PI * freq) / sampleRate;
+
+        float env = (1.0f - t);
+        float wave = SquareWave(phase);
+
+        samples[i] = static_cast<int16_t>(wave * env * 18000.0f);
+    }
+    return samples;
+}
+
 bool SoundGenerator::GenerateAllAssets(const std::string& outputFolder) {
-    // Ensure the output directory exists
     std::filesystem::create_directories(outputFolder);
 
     bool success = true;
@@ -188,5 +237,9 @@ bool SoundGenerator::GenerateAllAssets(const std::string& outputFolder) {
     success &= SaveWAV(outputFolder + "laser.wav", GenerateLaser());
     success &= SaveWAV(outputFolder + "stun.wav", GenerateStun());
     success &= SaveWAV(outputFolder + "round_clear.wav", GenerateRoundClear());
+    
+    // Generate new snack sound assets
+    success &= SaveWAV(outputFolder + "powerup_snack.wav", GeneratePowerUpSnack());
+    success &= SaveWAV(outputFolder + "powerdown_snack.wav", GeneratePowerDownSnack());
     return success;
 }

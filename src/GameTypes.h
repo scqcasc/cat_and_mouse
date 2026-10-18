@@ -10,7 +10,8 @@ enum class RoomID {
     GuestBedroom,
     Kitchen,
     Hallway,
-    Outside
+    Outside,
+    None
 };
 
 enum class MouseState {
@@ -23,7 +24,9 @@ enum class ItemType {
     None,
     Slingshot,
     LaserBlaster,
-    ToyRobot
+    ToyRobot,
+    PowerUpSnack,   
+    PowerDownSnack
 };
 
 enum class FurnitureType {
@@ -45,6 +48,12 @@ struct Door {
     std::string label;
 };
 
+
+struct SpeedEffect {
+    float modifier = 1.0f; // Multiplier (e.g., 1.5f for +50%, 0.6f for -40%)
+    float duration = 0.0f; // Active time remaining in seconds
+};
+
 struct Mouse {
     SDL_FRect rect{ 0.0f, 0.0f, 20.0f, 20.0f };
     MouseState state = MouseState::Wander;
@@ -59,6 +68,7 @@ struct Mouse {
     ItemType equippedItem = ItemType::None;
     int ammo = 0;
     float shootCooldown = 0.0f;
+    SpeedEffect speedEffect;
 };
 
 struct Human {
@@ -75,6 +85,7 @@ struct Human {
 
     bool isHeadingToDoor = false;
     RoomID nextRoomID = RoomID::LivingRoom;
+    RoomID currentRoom = RoomID::LivingRoom;
 };
 
 struct Item {

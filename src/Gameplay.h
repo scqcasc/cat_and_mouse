@@ -19,6 +19,7 @@ public:
     void Render(SDL_Renderer* renderer, TTF_Font* fontUI);
 
 private:
+    RoomID previousHumanRoomID = RoomID::None;
     std::map<RoomID, RoomTemplate> roomTemplates;
     bool wasStunSoundPlayed = false;
     float scoreDecayTimer = 0.0f;
@@ -65,7 +66,14 @@ private:
     bool moveUpPressed = false;
     bool moveDownPressed = false;
 
+    SpeedEffect catSpeedEffect;
+    SpeedEffect speedEffect;
     // Helper Methods
+    void RenderSpeedEffectHUD(SDL_Renderer* renderer);
+    void MoveHumanToRoom(RoomID newRoomID);
+    void ApplySnackEffect(ItemType snackType, SpeedEffect& effect);
+    void UpdateSpeedEffects(float deltaTime);
+    void RespawnSnacksInRoom(RoomID roomID);
     void ProcessScoreDecay(float deltaTime);
     void DefineRoomTemplates();
     RoomState InstantiateRoomFromTemplate(const RoomTemplate& tmpl, float windowW, float windowH, int roundNum);

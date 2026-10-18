@@ -48,6 +48,8 @@ int main(int argc, char* argv[]) {
         SoundManager::Instance().LoadWAV(SoundEffect::Laser, "assets/audio/laser.wav");
         SoundManager::Instance().LoadWAV(SoundEffect::Stun, "assets/audio/stun.wav");
         SoundManager::Instance().LoadWAV(SoundEffect::RoundClear, "assets/audio/round_clear.wav");
+        SoundManager::Instance().LoadWAV(SoundEffect::PowerUpSnack, "assets/audio/powerup_snack.wav");
+        SoundManager::Instance().LoadWAV(SoundEffect::PowerDownSnack, "assets/audio/powerdown_snack.wav");
     }
     // Load a font for the gameplay HUD
     TTF_Font* fontUI = TTF_OpenFont("assets/fonts/static/Roboto-Regular.ttf", 18.0f);
