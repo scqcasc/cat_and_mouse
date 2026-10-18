@@ -68,6 +68,21 @@ private:
 
     SpeedEffect catSpeedEffect;
     SpeedEffect speedEffect;
+    // Initials Input Screen State
+    bool isEnteringInitials = false;
+    char initials[3] = { 'A', 'A', 'A' };
+    int currentLetterIdx = 0; // 0, 1, or 2
+    float inputCooldown = 0.0f;
+
+    // Character set available for arcade entry
+    const std::string charSet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
+
+    void CycleCharacter(int direction);
+    void SubmitHighScore();
+    void RenderInitialsScreen(SDL_Renderer* renderer);
+    void HandleInitialsInput(float deltaTime, const ControlsMenu& controls); 
+    void TriggerGameOver();
+
     // Helper Methods
     void RenderSpeedEffectHUD(SDL_Renderer* renderer);
     void MoveHumanToRoom(RoomID newRoomID);
@@ -99,4 +114,5 @@ private:
     void TriggerMeow();
     int GetTotalHouseMiceCount() const;
     void RenderHUD(SDL_Renderer* renderer, TTF_Font* fontUI);
+    void OnGameOver();
 };

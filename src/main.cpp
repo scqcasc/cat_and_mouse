@@ -8,6 +8,7 @@
 #include "Gameplay.h"
 #include "SoundManager.h"
 #include "SoundGenerator.h"
+#include "LeaderboardMenu.h"
 
 int main(int argc, char* argv[]) {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -67,6 +68,11 @@ int main(int argc, char* argv[]) {
 
     uint64_t lastTime = SDL_GetTicksNS();
 
+    // Initialize Database
+    ScoreDatabase::Instance().Initialize("highscores.db");
+
+    LeaderboardMenu leaderboardMenu;
+
 while (currentState != GameState::Exiting) {
         // Calculate Delta Time
         uint64_t currentTime = SDL_GetTicksNS();
@@ -88,6 +94,9 @@ while (currentState != GameState::Exiting) {
             }
             else if (currentState == GameState::SavesMenu) {
                 savesMenu.HandleInput(event, currentState);
+            }
+            else if (currentState == GameState::Leaderboard) {
+                leaderboardMenu.HandleInput(event, currentState);
             }
             else if (currentState == GameState::Gameplay) {
                 // Route KEY_DOWN and KEY_UP events to gameplay input handler
@@ -121,6 +130,11 @@ while (currentState != GameState::Exiting) {
             SDL_SetRenderDrawColor(renderer, 30, 38, 46, 255);
             SDL_RenderClear(renderer);
             savesMenu.Render(renderer);
+        }
+        else if (currentState == GameState::Leaderboard) {
+            SDL_SetRenderDrawColor(renderer, 30, 38, 46, 255);
+            SDL_RenderClear(renderer);
+            leaderboardMenu.Render(renderer);
         }
 
         SDL_RenderPresent(renderer);

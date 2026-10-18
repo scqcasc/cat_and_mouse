@@ -9,6 +9,7 @@ enum class GameState {
     Gameplay,
     ControlsMenu,
     SavesMenu,
+    Leaderboard,
     Exiting
 };
 

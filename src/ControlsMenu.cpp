@@ -214,3 +214,59 @@ void ControlsMenu::Render(SDL_Renderer* renderer) {
         RenderText(renderer, fontButton, displayText.c_str(), buttonCenterX, buttonCenterY, textColor);
     }
 }
+
+SDL_Keycode ControlsMenu::GetKeyUp() const {
+    for (const auto& b : bindings) {
+        if (b.actionName == "Move Up") return b.keycode;
+    }
+    return SDLK_W;
+}
+
+SDL_Keycode ControlsMenu::GetKeyDown() const {
+    for (const auto& b : bindings) {
+        if (b.actionName == "Move Down") return b.keycode;
+    }
+    return SDLK_S;
+}
+
+SDL_Keycode ControlsMenu::GetKeyLeft() const {
+    for (const auto& b : bindings) {
+        if (b.actionName == "Move Left") return b.keycode;
+    }
+    return SDLK_A;
+}
+
+SDL_Keycode ControlsMenu::GetKeyRight() const {
+    for (const auto& b : bindings) {
+        if (b.actionName == "Move Right") return b.keycode;
+    }
+    return SDLK_D;
+}
+
+SDL_Keycode ControlsMenu::GetKeyMeow() const {
+    for (const auto& b : bindings) {
+        if (b.actionName == "Meow") return b.keycode;
+    }
+    return SDLK_SPACE;
+}
+
+SDL_Keycode ControlsMenu::GetKeyPickUp() const {
+    for (const auto& b : bindings) {
+        if (b.actionName == "Pick Up Item") return b.keycode;
+    }
+    return SDLK_G;
+}
+
+SDL_Keycode ControlsMenu::GetKeyUseItem() const {
+    for (const auto& b : bindings) {
+        if (b.actionName == "Use Item") return b.keycode;
+    }
+    return SDLK_H;
+}
+
+SDL_Keycode ControlsMenu::GetKeyDropItem() const {
+    for (const auto& b : bindings) {
+        if (b.actionName == "Drop Item") return b.keycode;
+    }
+    return SDLK_J;
+}

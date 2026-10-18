@@ -4,6 +4,7 @@
 #include <random>
 #include <cmath>
 #include "SoundManager.h"
+#include "ScoreDatabase.h"
 #include <algorithm>
 
 Gameplay::Gameplay() {
@@ -12,6 +13,87 @@ Gameplay::Gameplay() {
 }
 
 Gameplay::~Gameplay() {}
+
+void Gameplay::HandleInput(const SDL_Event& event, GameState& currentState, const ControlsMenu& controls) {
+    if (isEnteringInitials) return;
+
+    // 1. Movement State Updates (Key Down & Key Up)
+    if (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP) {
+        bool isPressed = (event.type == SDL_EVENT_KEY_DOWN);
+        SDL_Keycode key = event.key.key;
+
+        if (key == controls.GetKeyLeft())  moveLeftPressed  = isPressed;
+        if (key == controls.GetKeyRight()) moveRightPressed = isPressed;
+        if (key == controls.GetKeyUp())    moveUpPressed    = isPressed;
+        if (key == controls.GetKeyDown())  moveDownPressed  = isPressed;
+    }
+
+    // 2. One-Shot Actions (Key Down Only)
+    if (event.type == SDL_EVENT_KEY_DOWN) {
+        SDL_Keycode key = event.key.key;
+
+        // Use Equipped Item (Slingshot, Laser Blaster, Toy Robot)
+        if (key == controls.GetKeyUseItem()) {
+            UseEquippedItem();
+        }
+        // Manual Pick Up Item (if not using automatic walk-over pickup)
+        else if (key == controls.GetKeyPickUp()) {
+            CheckItemPickups();
+        }
+        // // Drop Equipped Item
+        // else if (key == controls.GetKeyDropItem()) {
+        //     DropEquippedItem();
+        // }
+        // Meow / Distraction Action
+        else if (key == controls.GetKeyMeow()) {
+            TriggerMeow();
+        }
+        // Return to Menu
+        else if (key == SDLK_ESCAPE) {
+            currentState = GameState::MainMenu;
+        }
+    }
+}
+
+void Gameplay::CycleCharacter(int direction) {
+    // Find current character index in charSet
+    size_t pos = charSet.find(initials[currentLetterIdx]);
+    if (pos == std::string::npos) pos = 0;
+
+    if (direction > 0) {
+        pos = (pos + 1) % charSet.length();
+    } else {
+        pos = (pos == 0) ? charSet.length() - 1 : pos - 1;
+    }
+
+    initials[currentLetterIdx] = charSet[pos];
+    SoundManager::Instance().Play(SoundEffect::Squeak); // Audio feedback on tick
+}
+
+void Gameplay::SubmitHighScore() {
+    std::string playerInitials(initials, 3);
+    
+    // Save to SQLite database
+    ScoreDatabase::Instance().SaveScore(playerInitials, score, roundNumber);
+    
+    SoundManager::Instance().Play(SoundEffect::RoundClear);
+    isEnteringInitials = false;
+    // Transition to main menu / leaderboard display
+}
+
+
+void Gameplay::TriggerGameOver() {
+    if (!isGameOver) {
+        isGameOver = true;
+        
+        // Trigger initials input if score qualifies
+        if (score > 0) {
+            isEnteringInitials = true;
+            initials[0] = 'A'; initials[1] = 'A'; initials[2] = 'A';
+            currentLetterIdx = 0;
+        }
+    }
+}
 
 void Gameplay::ApplySnackEffect(ItemType snackType, SpeedEffect& effect) {
     if (snackType == ItemType::PowerUpSnack) {
@@ -229,6 +311,11 @@ RoomState Gameplay::InstantiateRoomFromTemplate(const RoomTemplate& tmpl, float 
 }
 
 void Gameplay::InitializeHouse(float windowWidth, float windowHeight) {
+    // Reset state flags
+    isGameOver = false;
+    isEnteringInitials = false;
+    currentLetterIdx = 0;
+    initials[0] = 'A'; initials[1] = 'A'; initials[2] = 'A';
     house.clear();
 
     if (roomTemplates.empty()) {
@@ -300,34 +387,65 @@ void Gameplay::UseEquippedItem() {
 }
 
 
-void Gameplay::HandleInput(const SDL_Event& event, GameState& currentState, const ControlsMenu& controls) {
-    if (event.type == SDL_EVENT_KEY_DOWN) {
-        if (event.key.key == SDLK_ESCAPE) {
-            currentState = GameState::MainMenu;
-            return;
-        }
+void Gameplay::HandleInitialsInput(float deltaTime, const ControlsMenu& controls) {
+    if (!isEnteringInitials) return;
 
-        if (event.key.key == controls.GetKeyForAction(0)) moveLeftPressed = true;
-        if (event.key.key == controls.GetKeyForAction(1)) moveRightPressed = true;
-        if (event.key.key == controls.GetKeyForAction(2)) moveUpPressed = true;
-        if (event.key.key == controls.GetKeyForAction(3)) moveDownPressed = true;
-
-        if (event.key.key == controls.GetKeyForAction(4)) { // Action / Use Item
-            UseEquippedItem();
-        }
-        if (event.key.key == controls.GetKeyForAction(5)) { // Meow Key
-            TriggerMeow();
-        }
+    if (inputCooldown > 0.0f) {
+        inputCooldown -= deltaTime;
+        return;
     }
-    else if (event.type == SDL_EVENT_KEY_UP) {
-        if (event.key.key == controls.GetKeyForAction(0)) moveLeftPressed = false;
-        if (event.key.key == controls.GetKeyForAction(1)) moveRightPressed = false;
-        if (event.key.key == controls.GetKeyForAction(2)) moveUpPressed = false;
-        if (event.key.key == controls.GetKeyForAction(3)) moveDownPressed = false;
+
+    const bool* keys = SDL_GetKeyboardState(NULL);
+
+    // Get scancodes from mapped keycodes
+    SDL_Scancode codeUp    = SDL_GetScancodeFromKey(controls.GetKeyUp(), NULL);
+    SDL_Scancode codeDown  = SDL_GetScancodeFromKey(controls.GetKeyDown(), NULL);
+    SDL_Scancode codeLeft  = SDL_GetScancodeFromKey(controls.GetKeyLeft(), NULL);
+    SDL_Scancode codeRight = SDL_GetScancodeFromKey(controls.GetKeyRight(), NULL);
+    SDL_Scancode codeMeow  = SDL_GetScancodeFromKey(controls.GetKeyMeow(), NULL);
+
+    // Up / Down: Cycle character at current index
+    if (keys[codeUp]) {
+        CycleCharacter(1);
+        inputCooldown = 0.18f;
+    } 
+    else if (keys[codeDown]) {
+        CycleCharacter(-1);
+        inputCooldown = 0.18f;
+    }
+    // Left / Right: Move cursor position
+    else if (keys[codeLeft]) {
+        if (currentLetterIdx > 0) {
+            currentLetterIdx--;
+            SoundManager::Instance().Play(SoundEffect::Slingshot);
+        }
+        inputCooldown = 0.20f;
+    } 
+    else if (keys[codeRight]) {
+        if (currentLetterIdx < 2) {
+            currentLetterIdx++;
+            SoundManager::Instance().Play(SoundEffect::Slingshot);
+        }
+        inputCooldown = 0.20f;
+    }
+    // Enter / Action Key: Advance cursor or submit
+    else if (keys[SDL_SCANCODE_RETURN] || keys[codeMeow]) {
+        if (currentLetterIdx < 2) {
+            currentLetterIdx++;
+            SoundManager::Instance().Play(SoundEffect::Slingshot);
+        } else {
+            SubmitHighScore();
+        }
+        inputCooldown = 0.25f;
     }
 }
 
 void Gameplay::Update(float deltaTime, const ControlsMenu& controls) {
+    if (isEnteringInitials) {
+        HandleInitialsInput(deltaTime, controls);
+        return; // Pause world updates during high score input
+    }
+
     if (isGameOver || !isHouseInitialized) return;
 
     // ... round banner & outside penalty timer updates ...
@@ -372,7 +490,10 @@ void Gameplay::Update(float deltaTime, const ControlsMenu& controls) {
     UpdateProjectiles(deltaTime);
 }
 
+
 void Gameplay::ProcessCatMovement(float deltaTime) {
+    if (isGameOver || isEnteringInitials) return;
+
     float moveX = 0.0f;
     float moveY = 0.0f;
 
@@ -397,16 +518,16 @@ void Gameplay::ProcessCatMovement(float deltaTime) {
     // Effective cat speed adjusted by active snack modifier
     float currentCatSpeed = catSpeed * catSpeedEffect.modifier;
 
+    // X Axis Movement & Furniture Push
     catRect.x += moveX * currentCatSpeed * deltaTime;
 
-    // X Axis Movement & Furniture Push
     for (auto& item : currentRoom.furniture) {
         if (SDL_HasRectIntersectionFloat(&catRect, &item.rect)) {
             if (item.type == FurnitureType::Static) {
                 if (moveX > 0) catRect.x = item.rect.x - catRect.w;
                 else if (moveX < 0) catRect.x = item.rect.x + item.rect.w;
             } else {
-                item.rect.x += moveX * (catSpeed * 0.4f) * deltaTime;
+                item.rect.x += moveX * (currentCatSpeed * 0.4f) * deltaTime;
                 if (item.rect.x < bounds.x) {
                     item.rect.x = bounds.x;
                     catRect.x = item.rect.x + item.rect.w;
@@ -418,15 +539,16 @@ void Gameplay::ProcessCatMovement(float deltaTime) {
         }
     }
 
-    // Y Axis Movement & Furniture Push
-    catRect.y += moveY * catSpeed * deltaTime;
+    // Y Axis Movement & Furniture Push (Updated to use currentCatSpeed)
+    catRect.y += moveY * currentCatSpeed * deltaTime;
+
     for (auto& item : currentRoom.furniture) {
         if (SDL_HasRectIntersectionFloat(&catRect, &item.rect)) {
             if (item.type == FurnitureType::Static) {
                 if (moveY > 0) catRect.y = item.rect.y - catRect.h;
                 else if (moveY < 0) catRect.y = item.rect.y + item.rect.h;
             } else {
-                item.rect.y += moveY * (catSpeed * 0.4f) * deltaTime;
+                item.rect.y += moveY * (currentCatSpeed * 0.4f) * deltaTime;
                 if (item.rect.y < bounds.y) {
                     item.rect.y = bounds.y;
                     catRect.y = item.rect.y + item.rect.h;
@@ -699,6 +821,7 @@ void Gameplay::Render(SDL_Renderer* renderer, TTF_Font* fontUI) {
 
     RenderHUD(renderer, fontUI);
     RenderSpeedEffectHUD(renderer);
+    RenderInitialsScreen(renderer);
 }
 
 void Gameplay::TriggerMeow() {
@@ -1208,4 +1331,51 @@ void Gameplay::RenderSpeedEffectHUD(SDL_Renderer* renderer) {
         6.0f
     };
     SDL_RenderFillRect(renderer, &barRect);
+}
+
+void Gameplay::OnGameOver() {
+    // Prompt user for 3-letter initials, then save
+    std::string playerInitials = "CAT"; // Replace with player initials input box
+    ScoreDatabase::Instance().SaveScore(playerInitials, score, roundNumber);
+}
+
+void Gameplay::RenderInitialsScreen(SDL_Renderer* renderer) {
+    if (!isEnteringInitials) return;
+
+    // 1. Semi-transparent dark overlay
+    SDL_FRect bgRect{ 0.0f, 0.0f, windowWidth, windowHeight };
+    SDL_SetRenderDrawColor(renderer, 10, 10, 20, 230);
+    SDL_RenderFillRect(renderer, &bgRect);
+
+    // 2. Central Modal Box
+    SDL_FRect box{ windowWidth / 2.0f - 220.0f, windowHeight / 2.0f - 140.0f, 440.0f, 280.0f };
+    SDL_SetRenderDrawColor(renderer, 20, 20, 35, 255);
+    SDL_RenderFillRect(renderer, &box);
+    SDL_SetRenderDrawColor(renderer, 255, 215, 0, 255); // Gold border
+    SDL_RenderRect(renderer, &box);
+
+    // 3. Render 3 Initials Slots
+    float slotWidth = 50.0f;
+    float startX = box.x + (box.w / 2.0f) - (3.0f * slotWidth / 2.0f) - 10.0f;
+    float slotY = box.y + 120.0f;
+
+    for (int i = 0; i < 3; ++i) {
+        SDL_FRect slotRect{ startX + (i * (slotWidth + 10.0f)), slotY, slotWidth, 60.0f };
+
+        // Highlight active cursor slot with blinking gold border
+        if (i == currentLetterIdx) {
+            Uint64 ticks = SDL_GetTicks();
+            if ((ticks / 300) % 2 == 0) {
+                SDL_SetRenderDrawColor(renderer, 255, 255, 100, 255);
+            } else {
+                SDL_SetRenderDrawColor(renderer, 180, 180, 40, 255);
+            }
+        } else {
+            SDL_SetRenderDrawColor(renderer, 80, 80, 100, 255);
+        }
+
+        SDL_RenderFillRect(renderer, &slotRect);
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        SDL_RenderRect(renderer, &slotRect);
+    }
 }

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(Cat_And_Mouse LANGUAGES CXX)
+project(Cat_And_Mouse LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -18,10 +18,15 @@ add_executable(cat_and_mouse
     src/GameTypes.h
     src/Gameplay.h
     src/Gameplay.cpp
+    src/LeaderboardMenu.h
+    src/LeaderboardMenu.cpp
     src/SoundManager.cpp
     src/SoundManager.h
     src/SoundGenerator.h
     src/SoundGenerator.cpp
+    src/ScoreDatabase.h
+    src/ScoreDatabase.cpp
+    deps/sqlite3-win64/include/sqlite3.c
 )
 
 if(WIN32)
@@ -31,13 +36,16 @@ if(WIN32)
     set(SDL3_WIN64_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/sdl3-win64")
     set(SDL3_TTF_WIN64_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/sdl3_ttf-win64")
     set(VULKAN_WIN64_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/vulkan-win64")
+    set(SQLITE_WIN64_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/sqlite3-win64")
 
     # Include Headers
     target_include_directories(cat_and_mouse PRIVATE 
         "${SDL3_WIN64_DIR}/include"
         "${SDL3_TTF_WIN64_DIR}/include"
         "${VULKAN_WIN64_DIR}/include"
+        "${SQLITE_WIN64_DIR}/include"
     )
+
 
     # Link Libraries
     target_link_libraries(cat_and_mouse PRIVATE 
@@ -74,6 +82,9 @@ else()
     find_package(SDL3 REQUIRED)
     find_package(SDL3_ttf REQUIRED)
     find_package(Vulkan REQUIRED)
+
+    # Explicitly instruct CMake to compile sqlite3.c as C code
+    set_source_files_properties(deps/sqlite3/sqlite3.c PROPERTIES LANGUAGE C)
 
     target_link_libraries(cat_and_mouse PRIVATE 
         SDL3::SDL3 

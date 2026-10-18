@@ -22,6 +22,15 @@ public:
 
     void SaveBindings();
     void LoadBindings();
+    // Keycode lookup getters for gameplay & input handling
+    SDL_Keycode GetKeyUp() const;
+    SDL_Keycode GetKeyDown() const;
+    SDL_Keycode GetKeyLeft() const;
+    SDL_Keycode GetKeyRight() const;
+    SDL_Keycode GetKeyMeow() const;
+    SDL_Keycode GetKeyPickUp() const;
+    SDL_Keycode GetKeyUseItem() const;
+    SDL_Keycode GetKeyDropItem() const;
 
 private:
     std::string GetConfigFilePath();
